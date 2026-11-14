@@ -26,9 +26,18 @@
         <h1 class="site-title">Bases</h1>
         <span class="site-divider">/</span>
         <span class="site-subtitle" id="header-summary">16 cataloged · 9 priority</span>
-        <span class="origin-pill" id="active-origin-pill" title="Active vector origin for distance and F3 yaw calculations">
+        <button type="button" class="origin-pill" id="active-origin-pill" title="Active vector origin for distance and F3 yaw calculations">
           Origin: Spawn (0, 0)
-        </span>
+        </button>
+        <button
+          type="button"
+          class="origin-pill"
+          id="active-seed-pill"
+          data-copy="-614052161281575935"
+          title="Click to copy SMP World Seed (-614052161281575935)"
+        >
+          Seed: -614052161281575935
+        </button>
       </div>
 
       <div class="header-actions">
@@ -106,7 +115,7 @@
                 </div>
               </div>
               <div class="calc-meta-readout mono" id="calc-meta-readout">
-                Chunk: [-308, -78] · Region: r.-10.-3.mca
+                Distance from Spawn: 5,073 blocks OW (634 blocks in Nether)
               </div>
             </div>
 
@@ -115,6 +124,17 @@
               <select id="origin-select" class="form-select input-sm">
                 <option value="0,0">World Spawn (0, 0)</option>
               </select>
+            </div>
+
+            <div class="popover-section">
+              <div class="popover-label">SMP WORLD SEED</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg-recessed);border:1px solid var(--border-subtle);padding:7px 10px;">
+                <code class="mono" style="font-size:12px;color:var(--text-primary);">-614052161281575935</code>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" class="btn-secondary btn-xs" data-copy="-614052161281575935">Copy Seed</button>
+                  <button type="button" class="btn-secondary btn-xs" id="btn-open-calc-seedmap" title="View calculator coordinates on Chunkbase Seed Map">Seed Map ↗</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -355,7 +375,7 @@
                 <label class="facet-check"><input type="checkbox" data-col="ow" checked /><span>Overworld (X, Y, Z)</span></label>
                 <label class="facet-check"><input type="checkbox" data-col="nether" checked /><span>Nether Roof (÷8)</span></label>
                 <label class="facet-check"><input type="checkbox" data-col="vector" checked /><span>Δ Distance &amp; F3 Yaw</span></label>
-                <label class="facet-check"><input type="checkbox" data-col="meta" /><span>Biome &amp; Region (.mca)</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="meta" /><span>Biome</span></label>
                 <label class="facet-check"><input type="checkbox" data-col="players" /><span>Spotted Players</span></label>
               </div>
               <hr class="popover-divider" />
@@ -417,7 +437,7 @@
                     <th class="num th-sortable" data-col-id="ow" data-sort="x">Overworld (X, Y, Z)</th>
                     <th class="num" data-col-id="nether">Nether Roof (÷8)</th>
                     <th class="num th-sortable" data-col-id="vector" data-sort="distance">Δ Dist &amp; F3 Yaw</th>
-                    <th data-col-id="meta" hidden>Biome &amp; Region</th>
+                    <th data-col-id="meta" hidden>Biome</th>
                     <th data-col-id="players" hidden>Players</th>
                     <th class="num">Actions</th>
                   </tr>
@@ -460,7 +480,7 @@
               <span class="hud-sep">|</span>
               <label class="hud-toggle">
                 <input type="checkbox" id="radar-show-regions" checked />
-                <span>512m Regions</span>
+                <span>Grid Lines</span>
               </label>
               <label class="hud-toggle">
                 <input type="checkbox" id="radar-show-labels" checked />
@@ -540,7 +560,7 @@
       <div class="bulk-divider"></div>
 
       <button type="button" class="btn-secondary btn-xs" id="btn-bulk-route">+ Add to Route</button>
-      <button type="button" class="btn-primary btn-xs" id="btn-bulk-xaero">Copy Xaero</button>
+      <button type="button" class="btn-primary btn-xs" id="btn-bulk-xaero" title="Copy local Xaero waypoint file lines (mw$default_1.txt)">Copy Xaero</button>
       <button type="button" class="btn-danger btn-xs" id="btn-bulk-delete">Delete</button>
     </div>
   </div>
@@ -590,22 +610,22 @@
 
       <footer class="route-drawer-footer">
         <button type="button" class="btn-primary" id="btn-route-copy-xaero" style="width:100%;">
-          Copy Numbered Route for Xaero Chat (OW)
+          Copy Route for Local Xaero File (mw$default_1.txt)
         </button>
         <button type="button" class="btn-secondary" id="btn-route-copy-nether" style="width:100%;">
-          Copy Nether Roof Portal Waypoints (X÷8, 128, Z÷8)
+          Copy Nether Roof Coordinates (X÷8, 128, Z÷8)
         </button>
       </footer>
     </aside>
   </div>
 
-  <!-- XAERO'S MINIMAP TELEMETRY & IMPORT/EXPORT STUDIO MODAL -->
+  <!-- XAERO'S MINIMAP LOCAL WAYPOINT FILE & COORDINATE STUDIO MODAL -->
   <div id="xaero-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="xaero-modal-title">
     <div class="modal-dialog modal-wide">
       <header class="modal-topbar">
         <div class="modal-heading-group">
-          <h2 class="modal-title" id="xaero-modal-title">Xaero's Minimap Waypoint Studio</h2>
-          <span class="modal-coord-pill">Export Chat Strings, Download mw$default_1.txt, or Import Waypoints</span>
+          <h2 class="modal-title" id="xaero-modal-title">Xaero's Minimap Local Waypoint Studio</h2>
+          <span class="modal-coord-pill">Private Local Client Waypoint File (mw$default_1.txt) &amp; Manual Coordinates</span>
         </div>
         <button type="button" class="btn-secondary btn-sm" id="xaero-modal-close">Esc</button>
       </header>
@@ -655,13 +675,13 @@
           <hr class="popover-divider" />
 
           <div class="form-group">
-            <label for="xaero-import-textarea">Import Xaero Waypoints (Reverse Ingestion)</label>
-            <p class="field-help">Paste <code>xaero-waypoint:...</code> chat lines or raw lines from a friend's <code>mw$default_1.txt</code> file to merge bases into this ledger.</p>
+            <label for="xaero-import-textarea">Import Local Waypoint File Lines</label>
+            <p class="field-help">Paste raw <code>waypoint:...</code> lines from a local <code>mw$default_1.txt</code> file to merge bases into this ledger.</p>
             <textarea
               id="xaero-import-textarea"
               class="form-textarea mono"
               rows="4"
-              placeholder="xaero-waypoint:PlayerBase:PB:-1200:40:3400:12:false:0:Internal-overworld-waypoints"
+              placeholder="waypoint:PlayerBase:PB:-1200:40:3400:12:false:0:gui.xaero_default:false:0:0:false"
             ></textarea>
             <button type="button" class="btn-secondary" id="btn-xaero-import" style="margin-top:6px;">
               Parse &amp; Import Waypoints
@@ -673,26 +693,26 @@
           <div class="xaero-output-card">
             <div class="xaero-output-header">
               <div>
-                <strong>In-Game Clickable Chat Strings (<code>xaero-waypoint:...</code>)</strong>
-                <div class="field-help">Paste into Minecraft chat to share clickable waypoints with your group</div>
+                <strong>Client Waypoint File (<code>mw$default_1.txt</code>)</strong>
+                <div class="field-help">Private local file — place inside <code>.minecraft/XaeroWaypoints/&lt;server&gt;/dim%0/</code> (or <code>dim%-1</code> for Nether)</div>
               </div>
-              <button type="button" class="btn-primary btn-sm" id="btn-copy-all-chat">Copy All Chat Lines</button>
+              <div style="display:flex;gap:8px;">
+                <button type="button" class="btn-secondary btn-sm" id="btn-copy-file-text">Copy Raw File Text</button>
+                <button type="button" class="btn-primary btn-sm" id="btn-download-xaero-file">Download mw$default_1.txt</button>
+              </div>
             </div>
-            <div class="xaero-chat-list" id="xaero-chat-list"></div>
+            <pre class="xaero-code-pre mono" id="xaero-file-output"></pre>
           </div>
 
           <div class="xaero-output-card">
             <div class="xaero-output-header">
               <div>
-                <strong>Client Waypoint File (<code>mw$default_1.txt</code>)</strong>
-                <div class="field-help">Place inside <code>.minecraft/XaeroWaypoints/&lt;server&gt;/dim%0/</code></div>
+                <strong>Individual Waypoint Coordinates &amp; Local File Entries</strong>
+                <div class="field-help">Add manually in Xaero's Minimap GUI or copy single <code>waypoint:...</code> lines into your local waypoint file</div>
               </div>
-              <div style="display:flex;gap:8px;">
-                <button type="button" class="btn-secondary btn-sm" id="btn-copy-file-text">Copy Raw Text</button>
-                <button type="button" class="btn-primary btn-sm" id="btn-download-xaero-file">Download mw$default_1.txt</button>
-              </div>
+              <button type="button" class="btn-secondary btn-sm" id="btn-copy-all-coords">Copy All XYZ List</button>
             </div>
-            <pre class="xaero-code-pre mono" id="xaero-file-output"></pre>
+            <div class="xaero-manual-list" id="xaero-manual-list"></div>
           </div>
         </div>
       </div>
@@ -712,7 +732,7 @@
         <div class="dossier-preset-bar" id="dossier-zoom-presets" role="group" aria-label="Optical zoom presets">
           <button type="button" class="seg-item is-active" data-preset="full">1:1 Full Frame</button>
           <button type="button" class="seg-item" data-preset="subject">Subject Vault</button>
-          <button type="button" class="seg-item" data-preset="f3_left">Left F3 (XYZ/Chunk)</button>
+          <button type="button" class="seg-item" data-preset="f3_left">Left F3 (XYZ/Biome)</button>
           <button type="button" class="seg-item" data-preset="f3_right">Right F3 (Target Block)</button>
         </div>
 
@@ -733,7 +753,7 @@
             <div class="media-actions">
               <button type="button" class="btn-secondary btn-sm" id="dossier-copy-xyz">Copy XYZ</button>
               <button type="button" class="btn-secondary btn-sm" id="dossier-copy-nether">Copy Nether (÷8)</button>
-              <button type="button" class="btn-primary btn-sm" id="dossier-copy-xaero">Copy Xaero Waypoint</button>
+              <button type="button" class="btn-primary btn-sm" id="dossier-copy-xaero" title="Copy private local waypoint line for mw$default_1.txt">Copy Local Waypoint</button>
             </div>
           </div>
         </div>
@@ -810,8 +830,10 @@
               <input type="text" id="edit-biome" class="form-input mono" />
             </div>
             <div class="form-group">
-              <label for="edit-region">Region / Chunk</label>
-              <input type="text" id="edit-region" class="form-input mono" />
+              <label>SMP Seed Map (-614052161281575935)</label>
+              <button type="button" class="btn-secondary" id="dossier-open-seedmap" style="height:35px;">
+                Open Base in Chunkbase ↗
+              </button>
             </div>
           </div>
 

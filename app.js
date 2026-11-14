@@ -251,6 +251,13 @@
       .trim();
   }
 
+  const SMP_SEED = '-614052161281575935';
+
+  function getChunkbaseUrl(x, z, dimension = 'overworld') {
+    const dimParam = dimension === 'the_end' ? 'end' : dimension === 'the_nether' ? 'nether' : 'overworld';
+    return `https://www.chunkbase.com/apps/seed-map#seed=${SMP_SEED}&platform=java_1_21&dimension=${dimParam}&x=${Math.round(x || 0)}&z=${Math.round(z || 0)}&zoom=0.5`;
+  }
+
   function buildXaeroWaypointData(base, options = {}) {
     const {
       indexPrefix = '',
@@ -289,13 +296,6 @@
     const disabled = disableRaided && st === 'raided' ? 'true' : 'false';
     const cleanSet = sanitizeXaeroToken(setName || 'gui.xaero_default');
 
-    let dimFolder = 'Internal-overworld-waypoints';
-    if (base.dimension === 'the_end') {
-      dimFolder = 'Internal-the_end-waypoints';
-    } else if (coordMode === 'nether_roof' || base.dimension === 'the_nether') {
-      dimFolder = 'Internal-the_nether-waypoints';
-    }
-
     return {
       name,
       initials,
@@ -304,7 +304,7 @@
       z,
       color,
       disabled,
-      chatLine: `xaero-waypoint:${name}:${initials}:${x}:${y}:${z}:${color}:${disabled}:0:${dimFolder}`,
+      coordsText: `${x} ${y} ${z}`,
       fileLine: `waypoint:${name}:${initials}:${x}:${y}:${z}:${color}:${disabled}:0:${cleanSet}:false:0:0:false`
     };
   }
@@ -778,6 +778,73 @@
     }
   }
 
+  function syncSelectionStateDOM() {
+    document.querySelectorAll('#bases-grid .base-card[data-base-id]').forEach(card => {
+      const id = card.dataset.baseId;
+      const selected = state.selectedIds.has(id);
+      card.classList.toggle('is-selected', selected);
+      const chip = card.querySelector('[data-select-chip]');
+      if (chip) {
+        chip.classList.toggle('is-checked', selected);
+        chip.setAttribute('aria-pressed', String(selected));
+        const box = chip.querySelector('.select-box-icon');
+        if (box) box.textContent = selected ? '✓' : '';
+      }
+    });
+
+    document.querySelectorAll('#bases-tbody tr[data-base-id]').forEach(tr => {
+      const id = tr.dataset.baseId;
+      const selected = state.selectedIds.has(id);
+      tr.classList.toggle('is-selected', selected);
+      const cb = tr.querySelector('input[data-select-id]');
+      if (cb) cb.checked = selected;
+    });
+
+    const checkAll = document.getElementById('table-check-all');
+    if (checkAll) {
+      const filtered = getFilteredBases();
+      const visibleIds = filtered.map(b => b.id);
+      const selectedVisibleCount = visibleIds.filter(id => state.selectedIds.has(id)).length;
+      checkAll.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+      checkAll.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+    }
+
+    renderBulkActionBar();
+  }
+
+  function syncRouteStateDOM() {
+    savePersistedPrefs();
+    renderHeaderAndCounts();
+    renderRouteDrawer();
+
+    if (state.filters.routeOnly || state.activeView === 'map') {
+      renderAll();
+      return;
+    }
+
+    document.querySelectorAll('#bases-grid .base-card[data-base-id]').forEach(card => {
+      const id = card.dataset.baseId;
+      const rIdx = state.routeIds.indexOf(id);
+      const inRoute = rIdx !== -1;
+      const chip = card.querySelector('.card-route-chip[data-toggle-route]');
+      if (chip) {
+        chip.classList.toggle('in-route', inRoute);
+        chip.textContent = inRoute ? `Stop #${rIdx + 1}` : '+ Route';
+      }
+    });
+
+    document.querySelectorAll('#bases-tbody tr[data-base-id]').forEach(tr => {
+      const id = tr.dataset.baseId;
+      const rIdx = state.routeIds.indexOf(id);
+      const inRoute = rIdx !== -1;
+      const btn = tr.querySelector('.tbl-action-btn[data-toggle-route]');
+      if (btn) {
+        btn.classList.toggle('in-route', inRoute);
+        btn.textContent = inRoute ? `#${rIdx + 1}` : '+Route';
+      }
+    });
+  }
+
   // ============================================================================
   // VIEW 1: PHOTO GRID
   // ============================================================================
@@ -830,23 +897,29 @@
             class="base-card ${st === 'raided' ? 'is-raided' : ''} ${isSelected ? 'is-selected' : ''} ${isInRoute ? 'in-route' : ''}"
             data-base-id="${escapeHtml(base.id)}"
           >
+            <div class="card-media-overlay">
+              <button
+                type="button"
+                class="card-select-chip ${isSelected ? 'is-checked' : ''}"
+                data-select-chip="${escapeHtml(base.id)}"
+                aria-pressed="${isSelected}"
+                title="Select for bulk editing (Shift+Click for range)"
+              >
+                <span class="select-box-icon" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+                <span>Select</span>
+              </button>
+
+              <button
+                type="button"
+                class="card-route-chip ${isInRoute ? 'is-routed' : ''}"
+                data-toggle-route="${escapeHtml(base.id)}"
+                title="${isInRoute ? 'Click to remove from Raid Route' : 'Add to Raid Route Planner'}"
+              >
+                ${isInRoute ? `Route #0${routeIdx + 1}` : '+ Route'}
+              </button>
+            </div>
+
             <div class="card-media" data-open-dossier="${escapeHtml(base.id)}">
-              <div class="card-media-overlay">
-                <div class="card-select-chip" data-select-chip="${escapeHtml(base.id)}" title="Select for bulk editing (Shift+Click for range)">
-                  <input type="checkbox" data-select-id="${escapeHtml(base.id)}" ${isSelected ? 'checked' : ''} />
-                  <span>Select</span>
-                </div>
-
-                <button
-                  type="button"
-                  class="card-route-chip ${isInRoute ? 'is-routed' : ''}"
-                  data-toggle-route="${escapeHtml(base.id)}"
-                  title="${isInRoute ? 'Click to remove from Raid Route' : 'Add to Raid Route Planner'}"
-                >
-                  ${isInRoute ? `Route #0${routeIdx + 1}` : '+ Route'}
-                </button>
-              </div>
-
               ${
                 imgSrc
                   ? `<img src="${imgSrc}" alt="${escapeHtml(base.name)}" loading="lazy" style="transform-origin:${escapeHtml(focusOrigin)};object-position:${escapeHtml(focusOrigin)};" />`
@@ -904,7 +977,7 @@
                   type="button"
                   class="xaero-copy-btn"
                   data-copy-xaero="${escapeHtml(base.id)}"
-                  title="Copy Xaero's Minimap waypoint string"
+                  title="Copy local Xaero waypoint file line (for mw$default_1.txt)"
                 >
                   Copy Xaero
                 </button>
@@ -1070,7 +1143,7 @@
             </td>
 
             <td class="mono" style="color:var(--text-secondary);font-size:11.5px;" ${!state.tableColumns.meta ? 'hidden' : ''}>
-              ${escapeHtml((base.biome || '').replace('minecraft:', ''))} · <span style="color:var(--text-muted);">${escapeHtml((base.region || '').split(' ')[0])}</span>
+              ${escapeHtml((base.biome || '—').replace('minecraft:', ''))}
             </td>
 
             <td style="color:var(--text-secondary);font-size:12px;" ${!state.tableColumns.players ? 'hidden' : ''}>
@@ -1079,7 +1152,7 @@
 
             <td class="num">
               <div style="display:inline-flex;align-items:center;gap:4px;">
-                <button type="button" class="xaero-copy-btn" data-copy-xaero="${escapeHtml(base.id)}">
+                <button type="button" class="xaero-copy-btn" data-copy-xaero="${escapeHtml(base.id)}" title="Copy local Xaero waypoint file line">
                   Xaero
                 </button>
                 <button
@@ -1148,8 +1221,8 @@
         <span>${formatNumber(dist.ow)}m · ${bearing.cardinal} (${bearing.yawStr})</span>
       </div>
       <div class="spec-row">
-        <span class="spec-key">BIOME &amp; REGION</span>
-        <span>${escapeHtml((base.biome || '').replace('minecraft:', ''))} · ${escapeHtml((base.region || '').split(' ')[0])}</span>
+        <span class="spec-key">BIOME</span>
+        <span>${escapeHtml((base.biome || '—').replace('minecraft:', ''))}</span>
       </div>
       <div class="spec-row">
         <span class="spec-key">SPOTTED PLAYERS</span>
@@ -1159,7 +1232,7 @@
         ${escapeHtml(base.containers || '')}${base.notes ? ` — ${escapeHtml(base.notes)}` : ''}
       </p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
-        <button type="button" class="btn-primary btn-sm" data-copy-xaero="${escapeHtml(base.id)}">Copy Xaero</button>
+        <button type="button" class="btn-primary btn-sm" data-copy-xaero="${escapeHtml(base.id)}" title="Copy local Xaero waypoint file line">Copy Xaero</button>
         <button type="button" class="btn-secondary btn-sm" data-toggle-route="${escapeHtml(base.id)}">
           ${routeIdx !== -1 ? `In Route (#0${routeIdx + 1})` : '+ Add to Route'}
         </button>
@@ -1649,23 +1722,6 @@
       };
     });
 
-    const chatContainer = document.getElementById('xaero-chat-list');
-    if (compiled.length === 0) {
-      chatContainer.innerHTML = `<div style="padding:18px;color:var(--text-muted);">No bases in selected scope.</div>`;
-    } else {
-      chatContainer.innerHTML = compiled
-        .map(
-          ({ base, wp }) => `
-          <div class="xaero-chat-row">
-            <strong style="min-width:130px;">${escapeHtml(base.plate || '')} · ${escapeHtml(base.name)}</strong>
-            <span class="xaero-chat-string" title="${escapeHtml(wp.chatLine)}">${escapeHtml(wp.chatLine)}</span>
-            <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(wp.chatLine)}">Copy</button>
-          </div>
-        `
-        )
-        .join('');
-    }
-
     const fileHeader = [
       '#',
       '#waypoint:name:initials:x:y:z:color:disabled:type:set:rotate_on_tp:tp_yaw:visibility_type:destination',
@@ -1673,6 +1729,28 @@
     ];
     const fileBody = compiled.map(c => c.wp.fileLine);
     document.getElementById('xaero-file-output').textContent = [...fileHeader, ...fileBody].join('\n');
+
+    const manualContainer = document.getElementById('xaero-manual-list');
+    if (manualContainer) {
+      if (compiled.length === 0) {
+        manualContainer.innerHTML = `<div style="padding:18px;color:var(--text-muted);">No bases in selected scope.</div>`;
+      } else {
+        manualContainer.innerHTML = compiled
+          .map(
+            ({ base, wp }) => `
+            <div class="xaero-manual-row">
+              <strong style="min-width:130px;">${escapeHtml(base.plate || '')} · ${escapeHtml(base.name)}</strong>
+              <span class="xaero-manual-string" title="${escapeHtml(wp.fileLine)}">XYZ: ${wp.x}, ${wp.y}, ${wp.z} · ${escapeHtml(wp.fileLine)}</span>
+              <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(wp.coordsText)}">Copy XYZ</button>
+                <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(wp.fileLine)}">Copy File Line</button>
+              </div>
+            </div>
+          `
+          )
+          .join('');
+      }
+    }
   }
 
   async function handleXaeroImport() {
@@ -1686,7 +1764,7 @@
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
       const parts = trimmed.split(':');
-      if (parts.length >= 6 && (parts[0] === 'waypoint' || parts[0] === 'xaero-waypoint')) {
+      if (parts.length >= 6 && parts[0] === 'waypoint') {
         const name = (parts[1] || 'Imported Base').replace(/^\d+_/, '').replace(/\s*\[N-ROOF\]$/i, '').trim() || 'Imported Base';
         const x = parseInt(parts[3], 10);
         const y = parseInt(parts[4], 10);
@@ -1839,7 +1917,6 @@
     document.getElementById('edit-y').value = base.y;
     document.getElementById('edit-z').value = base.z;
     document.getElementById('edit-biome').value = base.biome || '';
-    document.getElementById('edit-region').value = base.region || '';
     document.getElementById('edit-players').value = (base.players || []).join(', ');
     document.getElementById('edit-containers').value = base.containers || '';
     document.getElementById('edit-notes').value = base.notes || '';
@@ -1910,13 +1987,13 @@
         <kbd class="kbd-token">↵</kbd>
       </button>
       <button type="button" class="ctx-item" data-ctx-action="xaero-ow" data-id="${escapeHtml(base.id)}">
-        <span>Copy Xaero Waypoint (OW)</span>
+        <span>Copy Local Xaero Line (OW)</span>
         <kbd class="kbd-token">C</kbd>
       </button>
       ${
         nc
           ? `<button type="button" class="ctx-item" data-ctx-action="xaero-nether" data-id="${escapeHtml(base.id)}">
-               <span>Copy Nether Portal Waypoint (÷8)</span>
+               <span>Copy Local Nether Line (÷8)</span>
                <kbd class="kbd-token">N</kbd>
              </button>`
           : ''
@@ -1931,6 +2008,9 @@
              </button>`
           : ''
       }
+      <button type="button" class="ctx-item" data-ctx-action="open-seedmap" data-id="${escapeHtml(base.id)}">
+        <span>Open in Chunkbase Seed Map ↗</span>
+      </button>
       <div class="ctx-divider"></div>
       <button type="button" class="ctx-item" data-ctx-action="toggle-route" data-id="${escapeHtml(base.id)}">
         <span>${inRoute ? 'Remove from Raid Route' : '+ Add to Raid Route'}</span>
@@ -2053,24 +2133,40 @@
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Copy All Active Xaero Waypoints (Overworld)',
-        sub: 'Clipboard',
+        label: 'Copy All Active Local Xaero Waypoint Lines (Overworld)',
+        sub: 'mw$default_1.txt',
         run: () => {
           const lines = state.bases
             .filter(b => normalizeStatus(b.status) !== 'raided')
-            .map(b => buildXaeroWaypointData(b, { coordMode: 'exact' }).chatLine);
-          copyText(lines.join('\n'), `Copied ${lines.length} active Xaero waypoints`);
+            .map(b => buildXaeroWaypointData(b, { coordMode: 'exact' }).fileLine);
+          copyText(lines.join('\n'), `Copied ${lines.length} local Xaero file lines`);
         }
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Copy All Active Nether Roof Portal Waypoints (÷8)',
-        sub: 'Clipboard',
+        label: 'Copy All Active Nether Roof Portal Waypoint Lines (÷8)',
+        sub: 'mw$default_1.txt',
         run: () => {
           const lines = state.bases
             .filter(b => normalizeStatus(b.status) !== 'raided' && b.dimension === 'overworld')
-            .map(b => buildXaeroWaypointData(b, { coordMode: 'nether_roof' }).chatLine);
-          copyText(lines.join('\n'), `Copied ${lines.length} Nether Roof waypoints`);
+            .map(b => buildXaeroWaypointData(b, { coordMode: 'nether_roof' }).fileLine);
+          copyText(lines.join('\n'), `Copied ${lines.length} Nether Roof file lines`);
+        }
+      },
+      {
+        group: 'Route & Telemetry Actions',
+        label: `Copy SMP World Seed (${SMP_SEED})`,
+        sub: 'World Seed',
+        run: () => {
+          copyText(SMP_SEED, `Copied SMP Seed ${SMP_SEED}`);
+        }
+      },
+      {
+        group: 'Route & Telemetry Actions',
+        label: `Open SMP Seed Map in Chunkbase (${SMP_SEED})`,
+        sub: 'External Map ↗',
+        run: () => {
+          window.open(getChunkbaseUrl(state.origin.x, state.origin.z, 'overworld'), '_blank', 'noopener');
         }
       },
       {
@@ -2092,7 +2188,7 @@
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Open Xaero Waypoint Studio & Importer',
+        label: 'Open Local Xaero Waypoint Manager',
         sub: 'Export / Import',
         run: () => {
           renderXaeroStudio();
@@ -2251,12 +2347,11 @@
   }
 
   function updateCalculatorMeta(owX, owZ) {
-    const cx = Math.floor(owX / 16);
-    const cz = Math.floor(owZ / 16);
-    const rx = Math.floor(owX / 512);
-    const rz = Math.floor(owZ / 512);
+    const distOw = Math.round(Math.hypot(owX - state.origin.x, owZ - state.origin.z));
+    const distNether = Math.round(distOw / 8);
+    const originShort = (state.origin.label || 'Spawn').split('(')[0].trim() || 'Spawn';
     document.getElementById('calc-meta-readout').textContent =
-      `Chunk: [${cx}, ${cz}] · Region: r.${rx}.${rz}.mca`;
+      `Distance from ${originShort}: ${formatNumber(distOw)} blocks OW (${formatNumber(distNether)} blocks in Nether)`;
   }
 
   // ============================================================================
@@ -2273,7 +2368,7 @@
       return;
     }
     if (!Number.isNaN(x) && !Number.isNaN(z)) {
-      el.textContent = `Nether Roof Portal (÷8): ${Math.floor(x / 8)}, 128, ${Math.floor(z / 8)} · r.${Math.floor(x / 512)}.${Math.floor(z / 512)}.mca`;
+      el.textContent = `Nether Roof Portal (÷8): ${Math.floor(x / 8)}, 128, ${Math.floor(z / 8)}`;
     }
   }
 
@@ -2561,6 +2656,11 @@
       const z = document.getElementById('calc-nether-z').value;
       copyText(`${x} 128 ${z}`, `Copied Nether Roof ${x} 128 ${z}`, e.currentTarget);
     });
+    document.getElementById('btn-open-calc-seedmap')?.addEventListener('click', () => {
+      const x = Number(document.getElementById('calc-ow-x').value) || 0;
+      const z = Number(document.getElementById('calc-ow-z').value) || 0;
+      window.open(getChunkbaseUrl(x, z, 'overworld'), '_blank', 'noopener');
+    });
 
     // Vector Origin Select
     document.getElementById('origin-select').addEventListener('change', e => {
@@ -2570,6 +2670,7 @@
         z: oz || 0,
         label: e.target.options[e.target.selectedIndex]?.text || 'Spawn (0, 0)'
       };
+      updateCalculatorFromOverworld();
       renderAll();
       showToast(`Vector Origin → ${state.origin.label}`);
     });
@@ -2705,7 +2806,7 @@
       const filtered = getFilteredBases();
       if (e.target.checked) filtered.forEach(b => state.selectedIds.add(b.id));
       else filtered.forEach(b => state.selectedIds.delete(b.id));
-      renderAll();
+      syncSelectionStateDOM();
     });
 
     // Table Row Hover -> Live Preview Update & Double-Click Inline Edit
@@ -2754,7 +2855,7 @@
         const id = state.focusedBaseId;
         if (state.selectedIds.has(id)) state.selectedIds.delete(id);
         else state.selectedIds.add(id);
-        renderAll();
+        syncSelectionStateDOM();
       } else if (e.key === 'F2' && state.focusedBaseId) {
         e.preventDefault();
         const nameCell = document.querySelector(`td[data-name-cell="${CSS.escape(state.focusedBaseId)}"]`);
@@ -2768,11 +2869,11 @@
     // Floating Bulk Action Bar Events
     document.getElementById('btn-bulk-select-all').addEventListener('click', () => {
       getFilteredBases().forEach(b => state.selectedIds.add(b.id));
-      renderAll();
+      syncSelectionStateDOM();
     });
     document.getElementById('btn-bulk-clear').addEventListener('click', () => {
       state.selectedIds.clear();
-      renderAll();
+      syncSelectionStateDOM();
     });
     document.querySelectorAll('[data-bulk-status]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -2798,15 +2899,15 @@
           added++;
         }
       });
-      renderAll();
+      syncRouteStateDOM();
       showToast(`Added ${added} base(s) to Raid Route`);
     });
     document.getElementById('btn-bulk-xaero').addEventListener('click', e => {
       const lines = [...state.selectedIds]
         .map(id => state.bases.find(b => b.id === id))
         .filter(Boolean)
-        .map(b => buildXaeroWaypointData(b, { indexPrefix: b.plate, includeTier: true }).chatLine);
-      copyText(lines.join('\n'), `Copied ${lines.length} Xaero waypoints`, e.currentTarget);
+        .map(b => buildXaeroWaypointData(b, { indexPrefix: b.plate, includeTier: true }).fileLine);
+      copyText(lines.join('\n'), `Copied ${lines.length} local Xaero lines`, e.currentTarget);
     });
     document.getElementById('btn-bulk-delete').addEventListener('click', async e => {
       const ids = [...state.selectedIds];
@@ -2844,7 +2945,7 @@
     document.getElementById('btn-route-reverse')?.addEventListener('click', () => {
       if (state.routeIds.length < 2) return;
       state.routeIds.reverse();
-      renderAll();
+      syncRouteStateDOM();
       showToast('Reversed Raid Route order');
     });
     document.getElementById('map-btn-route-open').addEventListener('click', () => {
@@ -2852,7 +2953,7 @@
     });
     document.getElementById('btn-route-clear').addEventListener('click', () => {
       state.routeIds = [];
-      renderAll();
+      syncRouteStateDOM();
     });
 
     document.getElementById('btn-route-copy-xaero').addEventListener('click', e => {
@@ -2863,22 +2964,23 @@
           indexPrefix: String(i + 1).padStart(2, '0'),
           coordMode: 'exact',
           includeTier: true
-        }).chatLine
+        }).fileLine
       );
-      copyText(lines.join('\n'), `Copied ${lines.length} numbered route waypoints`, e.currentTarget);
+      copyText(lines.join('\n'), `Copied ${lines.length} local Xaero route lines`, e.currentTarget);
     });
 
     document.getElementById('btn-route-copy-nether').addEventListener('click', e => {
       const stops = state.routeIds.map(id => state.bases.find(b => b.id === id)).filter(Boolean);
       if (stops.length === 0) return showToast('Queue bases in route first');
-      const lines = stops.map((b, i) =>
-        buildXaeroWaypointData(b, {
+      const lines = stops.map((b, i) => {
+        const wp = buildXaeroWaypointData(b, {
           indexPrefix: String(i + 1).padStart(2, '0'),
           coordMode: 'nether_roof',
           includeTier: false
-        }).chatLine
-      );
-      copyText(lines.join('\n'), `Copied ${lines.length} Nether Roof portal waypoints`, e.currentTarget);
+        });
+        return `${String(i + 1).padStart(2, '0')}. ${b.name}: ${wp.coordsText}`;
+      });
+      copyText(lines.join('\n'), `Copied ${lines.length} Nether Roof coordinates`, e.currentTarget);
     });
 
     // Xaero Studio Modal
@@ -2904,9 +3006,14 @@
         document.getElementById(id)?.addEventListener('change', renderXaeroStudio);
       }
     );
-    document.getElementById('btn-copy-all-chat').addEventListener('click', e => {
-      const rows = [...document.querySelectorAll('#xaero-chat-list .xaero-chat-string')].map(el => el.textContent);
-      if (rows.length > 0) copyText(rows.join('\n'), `Copied ${rows.length} Xaero chat lines`, e.currentTarget);
+    document.getElementById('btn-copy-all-coords')?.addEventListener('click', e => {
+      const list = getXaeroScopeBases();
+      const coordMode = document.getElementById('xaero-coord-mode')?.value || 'exact';
+      const rows = list.map(b => {
+        const wp = buildXaeroWaypointData(b, { coordMode });
+        return `${b.plate || ''} ${b.name}: ${wp.coordsText}`;
+      });
+      if (rows.length > 0) copyText(rows.join('\n'), `Copied ${rows.length} base coordinates`, e.currentTarget);
     });
     document.getElementById('btn-copy-file-text').addEventListener('click', e => {
       const text = document.getElementById('xaero-file-output').textContent;
@@ -3101,19 +3208,15 @@
         return;
       }
 
-      // Row / Card Selection Checkbox (with Shift+Click range selection)
-      const selectContainer = e.target.closest('[data-select-chip], input[data-select-id]');
-      if (selectContainer) {
+      // Row / Card Selection (with Shift+Click range selection & zero-reflow DOM sync)
+      const selectChipBtn = e.target.closest('[data-select-chip]');
+      const selectInput = e.target.closest('input[data-select-id]');
+      if (selectChipBtn || selectInput) {
         e.stopPropagation();
-        const isDirectInput = e.target.matches('input[data-select-id]');
-        const selectCb = isDirectInput
-          ? e.target
-          : selectContainer.querySelector('input[data-select-id]');
-        if (!selectCb) return;
-        if (!isDirectInput) {
-          selectCb.checked = !selectCb.checked;
-        }
-        const id = selectCb.dataset.selectId;
+        if (selectChipBtn) e.preventDefault();
+        const id = selectChipBtn ? selectChipBtn.dataset.selectChip : selectInput.dataset.selectId;
+        if (!id) return;
+        const willSelect = selectChipBtn ? !state.selectedIds.has(id) : selectInput.checked;
         const filtered = getFilteredBases();
         if (e.shiftKey && state.lastSelectedId) {
           const i1 = filtered.findIndex(b => b.id === state.lastSelectedId);
@@ -3121,16 +3224,16 @@
           if (i1 !== -1 && i2 !== -1) {
             const [start, end] = i1 < i2 ? [i1, i2] : [i2, i1];
             for (let i = start; i <= end; i++) {
-              if (selectCb.checked) state.selectedIds.add(filtered[i].id);
+              if (willSelect) state.selectedIds.add(filtered[i].id);
               else state.selectedIds.delete(filtered[i].id);
             }
           }
         } else {
-          if (selectCb.checked) state.selectedIds.add(id);
+          if (willSelect) state.selectedIds.add(id);
           else state.selectedIds.delete(id);
         }
         state.lastSelectedId = id;
-        renderAll();
+        syncSelectionStateDOM();
         return;
       }
 
@@ -3224,24 +3327,30 @@
         closeContextMenus();
         if (act === 'dossier') openDossier(id);
         else if (act === 'xaero-ow') {
-          copyText(buildXaeroWaypointData(base, { coordMode: 'exact' }).chatLine, `Copied Xaero waypoint (${base.name})`);
+          copyText(
+            buildXaeroWaypointData(base, { coordMode: 'exact' }).fileLine,
+            `Copied local Xaero line (${base.name})`
+          );
         } else if (act === 'xaero-nether') {
           copyText(
-            buildXaeroWaypointData(base, { coordMode: 'nether_roof' }).chatLine,
-            `Copied Nether Portal waypoint (${base.name})`
+            buildXaeroWaypointData(base, { coordMode: 'nether_roof' }).fileLine,
+            `Copied Nether Roof Xaero line (${base.name})`
           );
         } else if (act === 'copy-xyz') {
           copyText(`${base.x} ${base.y} ${base.z}`, `Copied ${base.x} ${base.y} ${base.z}`);
         } else if (act === 'copy-nether-xyz') {
           const nc = getNetherCoords(base);
           if (nc) copyText(`${nc.x} 128 ${nc.z}`, `Copied Nether ${nc.x} 128 ${nc.z}`);
+        } else if (act === 'open-seedmap') {
+          window.open(getChunkbaseUrl(base.x, base.z, base.dimension), '_blank', 'noopener');
         } else if (act === 'toggle-route') {
           const idx = state.routeIds.indexOf(id);
           if (idx === -1) state.routeIds.push(id);
           else state.routeIds.splice(idx, 1);
-          renderAll();
+          syncRouteStateDOM();
         } else if (act === 'set-origin') {
           state.origin = { x: base.x, z: base.z, label: `${base.name} (${base.x}, ${base.z})` };
+          updateCalculatorFromOverworld();
           renderAll();
           showToast(`Vector Origin set to ${base.name}`);
         } else if (act === 'load-calc') {
@@ -3263,7 +3372,7 @@
           const tmp = state.routeIds[idx];
           state.routeIds[idx] = state.routeIds[targetIdx];
           state.routeIds[targetIdx] = tmp;
-          renderAll();
+          syncRouteStateDOM();
         }
         return;
       }
@@ -3281,7 +3390,7 @@
           state.routeIds.splice(idx, 1);
           showToast('Removed from Raid Route');
         }
-        renderAll();
+        syncRouteStateDOM();
         return;
       }
 
@@ -3293,14 +3402,14 @@
         return;
       }
 
-      // Copy Xaero Waypoint
+      // Copy Local Xaero Waypoint Line
       const xaeroBtn = e.target.closest('[data-copy-xaero]');
       if (xaeroBtn) {
         e.stopPropagation();
         const base = state.bases.find(b => b.id === xaeroBtn.dataset.copyXaero);
         if (!base) return;
         const wp = buildXaeroWaypointData(base, { indexPrefix: base.plate, includeTier: true });
-        await copyText(wp.chatLine, `Copied Xaero waypoint for ${base.name}`, xaeroBtn, '✓ Copied');
+        await copyText(wp.fileLine, `Copied local Xaero line for ${base.name}`, xaeroBtn, '✓ Copied');
         return;
       }
 
@@ -3349,7 +3458,7 @@
         const wx = Math.round(state.radar.centerX + (mx - rect.width / 2) / pxPerBlock);
         const wz = Math.round(state.radar.centerZ + (my - rect.height / 2) / pxPerBlock);
         document.getElementById('radar-cursor-readout').textContent =
-          `X: ${wx}, Z: ${wz} · Nether: ${Math.floor(wx / 8)}, ${Math.floor(wz / 8)} · r.${Math.floor(wx / 512)}.${Math.floor(wz / 512)}.mca`;
+          `X: ${wx}, Z: ${wz} · Nether: ${Math.floor(wx / 8)}, ${Math.floor(wz / 8)}`;
 
         let hit = null;
         for (const b of getFilteredBases()) {
@@ -3507,11 +3616,17 @@
       const b = state.bases.find(item => item.id === state.dossierBaseId);
       if (b) {
         copyText(
-          buildXaeroWaypointData(b, { indexPrefix: b.plate, includeTier: true }).chatLine,
-          `Copied Xaero waypoint for ${b.name}`,
+          buildXaeroWaypointData(b, { indexPrefix: b.plate, includeTier: true }).fileLine,
+          `Copied local Xaero line for ${b.name}`,
           e.currentTarget
         );
       }
+    });
+    document.getElementById('dossier-open-seedmap')?.addEventListener('click', () => {
+      const x = Number(document.getElementById('edit-x').value) || 0;
+      const z = Number(document.getElementById('edit-z').value) || 0;
+      const dim = document.getElementById('edit-dimension').value || 'overworld';
+      window.open(getChunkbaseUrl(x, z, dim), '_blank', 'noopener');
     });
     document.getElementById('dossier-toggle-route').addEventListener('click', () => {
       if (!state.dossierBaseId) return;
@@ -3519,7 +3634,7 @@
       if (idx === -1) state.routeIds.push(state.dossierBaseId);
       else state.routeIds.splice(idx, 1);
       openDossier(state.dossierBaseId);
-      renderAll();
+      syncRouteStateDOM();
     });
 
     document.getElementById('dossier-form').addEventListener('submit', async e => {
@@ -3535,7 +3650,6 @@
         y: Number(document.getElementById('edit-y').value),
         z: Number(document.getElementById('edit-z').value),
         biome: document.getElementById('edit-biome').value.trim(),
-        region: document.getElementById('edit-region').value.trim(),
         players: document.getElementById('edit-players').value,
         containers: document.getElementById('edit-containers').value.trim(),
         notes: document.getElementById('edit-notes').value.trim()
@@ -3650,7 +3764,7 @@
         }
         if (state.selectedIds.size > 0) {
           state.selectedIds.clear();
-          renderAll();
+          syncSelectionStateDOM();
           return;
         }
         if (document.activeElement === searchInput) searchInput.blur();

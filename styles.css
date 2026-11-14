@@ -178,6 +178,12 @@ button {
   background-color: var(--bg-surface-2);
 }
 
+.origin-pill.is-copied {
+  color: var(--accent-copied);
+  border-color: rgba(102, 184, 122, 0.45);
+  background-color: var(--accent-copied-bg);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -808,15 +814,10 @@ button:disabled {
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .bases-grid.crop-subject .card-media img {
   transform: scale(1.42);
-}
-
-.bases-grid.crop-subject .card-media:hover img {
-  transform: scale(1.34);
 }
 
 .bases-grid.crop-subject .card-media::after {
@@ -833,13 +834,13 @@ button:disabled {
   pointer-events: none;
 }
 
-/* Subtle top overlay controls on card image (hover or active) */
+/* Top overlay controls positioned directly on .base-card (decoupled from .card-media) */
 .card-media-overlay {
   position: absolute;
   top: 10px;
   left: 10px;
   right: 10px;
-  z-index: 2;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -851,23 +852,52 @@ button:disabled {
   pointer-events: auto;
   cursor: pointer;
   user-select: none;
-  background-color: rgba(12, 14, 12, 0.86);
+  background-color: rgba(12, 14, 12, 0.9);
   border: 1px solid var(--border-default);
-  padding: 4px 8px;
+  padding: 4px 9px;
   font-family: var(--font-mono);
   font-size: 11px;
+  line-height: 1.2;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   gap: 6px;
   opacity: 0;
-  transition: opacity 0.14s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: opacity 0.14s ease, color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.select-box-icon {
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--border-strong);
+  background-color: rgba(8, 9, 8, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: transparent;
+  flex-shrink: 0;
+}
+
+.card-select-chip.is-checked {
+  color: var(--text-primary);
+  border-color: var(--accent-priority);
+  background-color: rgba(20, 22, 20, 0.95);
+}
+
+.card-select-chip.is-checked .select-box-icon {
+  background-color: var(--accent-priority);
+  border-color: var(--accent-priority);
+  color: #ffffff;
 }
 
 .base-card:hover .card-select-chip,
 .base-card:hover .card-route-chip,
 .base-card.is-selected .card-select-chip,
-.base-card.in-route .card-route-chip {
+.base-card.in-route .card-route-chip,
+.card-select-chip:focus-visible,
+.card-route-chip:focus-visible {
   opacity: 1;
 }
 
@@ -1951,13 +1981,13 @@ button:disabled {
   gap: 12px;
 }
 
-.xaero-chat-list {
+.xaero-manual-list {
   max-height: 220px;
   overflow-y: auto;
   divide-y: 1px solid var(--border-subtle);
 }
 
-.xaero-chat-row {
+.xaero-manual-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1967,7 +1997,7 @@ button:disabled {
   font-size: 12px;
 }
 
-.xaero-chat-string {
+.xaero-manual-string {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-secondary);
