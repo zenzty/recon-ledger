@@ -3,143 +3,705 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SMP Bases — Raid &amp; Waypoint Index</title>
+  <title>Bases — SMP Reconnaissance, Nether Vector &amp; Xaero Ledger</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- Drag-and-Drop Overlay -->
+  <!-- Global Drag-and-Drop Overlay for F3 Screenshot Ingestion -->
   <div id="dropzone-overlay" class="dropzone-overlay" hidden>
     <div class="dropzone-frame">
-      <div class="dropzone-title">Drop F3 Screenshot to Add Base</div>
-      <div class="dropzone-sub">Automatically extracts player name and coordinates</div>
+      <div class="dropzone-kicker">OPTICAL F3 INGESTION</div>
+      <div class="dropzone-title">Drop Minecraft F3 Screenshot to Add Base</div>
+      <div class="dropzone-sub">Automatically extracts player identifier, Block XYZ, Dimension, and Biome</div>
     </div>
   </div>
 
   <div class="page-shell">
-    <!-- Top Masthead -->
+    <!-- TOP MASTHEAD -->
     <header class="site-header">
       <div class="header-brand">
         <h1 class="site-title">Bases</h1>
         <span class="site-divider">/</span>
         <span class="site-subtitle" id="header-summary">16 cataloged · 9 priority</span>
+        <span class="origin-pill" id="active-origin-pill" title="Active vector origin for distance and F3 yaw calculations">
+          Origin: Spawn (0, 0)
+        </span>
       </div>
 
       <div class="header-actions">
-        <button type="button" class="btn-secondary" id="btn-export-xaero" title="Copy all active unraided waypoints to paste in Minecraft chat">
-          Copy All Xaero
+        <!-- Command Menu Trigger -->
+        <button
+          type="button"
+          class="btn-secondary btn-with-kbd"
+          id="btn-open-cmd"
+          title="Open Command Menu (Ctrl+K or ⌘K)"
+        >
+          <span>Command</span>
+          <kbd class="kbd-token">⌘K</kbd>
         </button>
-        <button type="button" class="btn-secondary" id="btn-download-xaero" title="Download mw$default_1.txt waypoint file for Xaero's Minimap">
-          Export .txt
+
+        <!-- Nether Coordinate Converter & Vector Origin Popover Trigger -->
+        <div class="popover-anchor">
+          <button
+            type="button"
+            class="btn-secondary btn-with-kbd"
+            id="btn-toggle-nether-pop"
+            aria-expanded="false"
+            aria-haspopup="dialog"
+            title="Nether Roof (÷8) Coordinate Converter &amp; Vector Origin (Shortcut: C)"
+          >
+            <span id="coord-mode-indicator">Nether ÷8</span>
+            <kbd class="kbd-token">C</kbd>
+          </button>
+
+          <!-- Accessible Popover: Nether Converter & Vector Origin -->
+          <div
+            id="popover-nether"
+            class="popover-panel popover-wide"
+            role="dialog"
+            aria-label="Nether Coordinate Converter and Vector Origin"
+            hidden
+          >
+            <div class="popover-header">
+              <span class="popover-title">Coordinate Projection &amp; Nether Calculator</span>
+              <button type="button" class="btn-icon-close" data-close-popover="popover-nether" aria-label="Close">×</button>
+            </div>
+
+            <div class="popover-section">
+              <div class="popover-label">GLOBAL DISPLAY PROJECTION</div>
+              <div class="segmented-full" id="global-coord-mode">
+                <button type="button" class="seg-item is-active" data-coord-mode="overworld">
+                  Overworld Exact (X, Y, Z)
+                </button>
+                <button type="button" class="seg-item" data-coord-mode="nether">
+                  Nether Roof Portal (X÷8, 128, Z÷8)
+                </button>
+              </div>
+            </div>
+
+            <div class="popover-section">
+              <div class="popover-label">TWO-WAY OVERWORLD ↔ NETHER ROOF CALCULATOR</div>
+              <div class="calc-grid">
+                <div class="calc-box">
+                  <span class="calc-box-title">Overworld (X, Z)</span>
+                  <div class="calc-inputs">
+                    <input type="number" id="calc-ow-x" class="form-input mono input-sm" placeholder="X (-4920)" value="-4920" />
+                    <input type="number" id="calc-ow-z" class="form-input mono input-sm" placeholder="Z (-1237)" value="-1237" />
+                  </div>
+                  <button type="button" class="btn-secondary btn-xs" id="btn-copy-calc-ow">Copy OW XYZ</button>
+                </div>
+
+                <div class="calc-arrow">⇄</div>
+
+                <div class="calc-box">
+                  <span class="calc-box-title">Nether Roof (÷8, Y:128)</span>
+                  <div class="calc-inputs">
+                    <input type="number" id="calc-nether-x" class="form-input mono input-sm" placeholder="Nether X" value="-615" />
+                    <input type="number" id="calc-nether-z" class="form-input mono input-sm" placeholder="Nether Z" value="-155" />
+                  </div>
+                  <button type="button" class="btn-secondary btn-xs" id="btn-copy-calc-nether">Copy Nether XYZ</button>
+                </div>
+              </div>
+              <div class="calc-meta-readout mono" id="calc-meta-readout">
+                Chunk: [-308, -78] · Region: r.-10.-3.mca
+              </div>
+            </div>
+
+            <div class="popover-section">
+              <label for="origin-select" class="popover-label">REFERENCE VECTOR ORIGIN (FOR Δ DIST &amp; F3 YAW)</label>
+              <select id="origin-select" class="form-select input-sm">
+                <option value="0,0">World Spawn (0, 0)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Route Planner Trigger -->
+        <button
+          type="button"
+          class="btn-secondary btn-with-kbd"
+          id="btn-toggle-route-drawer"
+          title="Open Raid Route Planner &amp; Nearest-Neighbor Optimizer (Shortcut: R)"
+        >
+          <span>Route</span>
+          <span class="badge-count" id="header-route-count">0</span>
         </button>
-        <button type="button" class="btn-primary" id="btn-open-ingest">
+
+        <!-- Xaero I/O Studio Trigger -->
+        <button
+          type="button"
+          class="btn-secondary"
+          id="btn-open-xaero-modal"
+          title="Open Xaero's Minimap Compiler, Bulk Export &amp; Waypoint Importer"
+        >
+          Xaero I/O
+        </button>
+
+        <!-- Primary Add Base Button -->
+        <button type="button" class="btn-primary" id="btn-open-ingest" title="Add a new base or drop an F3 screenshot (Shortcut: N)">
           + Add Base
         </button>
       </div>
     </header>
 
-    <!-- Unified Control Bar: Status Filters (Left) + Search & View Switcher (Right) -->
+    <!-- UNTRACKED SCREENSHOTS BANNER (Auto-detected from folder) -->
+    <div id="untracked-banner" class="untracked-banner" hidden>
+      <div class="untracked-left">
+        <span class="untracked-badge">UNINDEXED SCREENSHOTS</span>
+        <span id="untracked-list-text"></span>
+      </div>
+      <div class="untracked-actions" id="untracked-buttons"></div>
+    </div>
+
+    <!-- UNIFIED CONTROL TOOLBAR -->
     <section class="toolbar" aria-label="Filters and view controls">
-      <div class="filter-pills" id="filter-status" role="tablist" aria-label="Filter by raid status">
-        <button type="button" class="filter-pill is-active" data-status="all">
-          <span>All</span>
-          <span class="pill-count" id="count-all">16</span>
-        </button>
-        <button type="button" class="filter-pill" data-status="priority">
-          <span class="status-dot dot-priority"></span>
-          <span>Priority</span>
-          <span class="pill-count" id="count-priority">9</span>
-        </button>
-        <button type="button" class="filter-pill" data-status="scouted">
-          <span class="status-dot dot-scouted"></span>
-          <span>Scouted</span>
-          <span class="pill-count" id="count-scouted">7</span>
-        </button>
-        <button type="button" class="filter-pill" data-status="raided">
-          <span class="status-dot dot-raided"></span>
-          <span>Raided</span>
-          <span class="pill-count" id="count-raided">0</span>
-        </button>
+      <div class="toolbar-left">
+        <!-- Status Filter Tabs -->
+        <div class="filter-pills" id="filter-status" role="tablist" aria-label="Filter by raid status">
+          <button type="button" class="filter-pill is-active" data-status="all" role="tab" aria-selected="true">
+            <span>All</span>
+            <span class="pill-count" id="count-all">16</span>
+          </button>
+          <button type="button" class="filter-pill" data-status="priority" role="tab" aria-selected="false">
+            <span class="status-dot dot-priority"></span>
+            <span>Priority</span>
+            <span class="pill-count" id="count-priority">9</span>
+          </button>
+          <button type="button" class="filter-pill" data-status="scouted" role="tab" aria-selected="false">
+            <span class="status-dot dot-scouted"></span>
+            <span>Scouted</span>
+            <span class="pill-count" id="count-scouted">7</span>
+          </button>
+          <button type="button" class="filter-pill" data-status="compromised" role="tab" aria-selected="false">
+            <span class="status-dot dot-compromised"></span>
+            <span>Alert</span>
+            <span class="pill-count" id="count-compromised">0</span>
+          </button>
+          <button type="button" class="filter-pill" data-status="raided" role="tab" aria-selected="false">
+            <span class="status-dot dot-raided"></span>
+            <span>Raided</span>
+            <span class="pill-count" id="count-raided">0</span>
+          </button>
+        </div>
+
+        <!-- Faceted Filter Popover Trigger (Tier, Dimension, Route) -->
+        <div class="popover-anchor">
+          <button
+            type="button"
+            class="btn-filter-trigger"
+            id="btn-toggle-facets"
+            aria-expanded="false"
+            aria-haspopup="dialog"
+          >
+            <span>+ Filter</span>
+            <span class="badge-count" id="active-facet-count" hidden>0</span>
+          </button>
+
+          <div
+            id="popover-facets"
+            class="popover-panel popover-facets"
+            role="dialog"
+            aria-label="Faceted filters"
+            hidden
+          >
+            <div class="popover-header">
+              <span class="popover-title">Filter Bases</span>
+              <button type="button" class="btn-link" id="btn-reset-facets">Reset all</button>
+            </div>
+
+            <div class="popover-section">
+              <div class="popover-label">LOOT VALUE TIER</div>
+              <div class="facet-options" id="facet-tier-list">
+                <label class="facet-check">
+                  <input type="checkbox" value="high" data-facet="tier" />
+                  <span>High (Shulkers / Stacked)</span>
+                  <span class="facet-count" id="facet-count-tier-high">0</span>
+                </label>
+                <label class="facet-check">
+                  <input type="checkbox" value="medium" data-facet="tier" />
+                  <span>Medium (Storage / Farm)</span>
+                  <span class="facet-count" id="facet-count-tier-medium">0</span>
+                </label>
+                <label class="facet-check">
+                  <input type="checkbox" value="low" data-facet="tier" />
+                  <span>Low (Outpost / Shell)</span>
+                  <span class="facet-count" id="facet-count-tier-low">0</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="popover-section">
+              <div class="popover-label">DIMENSION</div>
+              <div class="facet-options" id="facet-dim-list">
+                <label class="facet-check">
+                  <input type="checkbox" value="overworld" data-facet="dimension" />
+                  <span>Overworld</span>
+                  <span class="facet-count" id="facet-count-dim-overworld">0</span>
+                </label>
+                <label class="facet-check">
+                  <input type="checkbox" value="the_end" data-facet="dimension" />
+                  <span>The End</span>
+                  <span class="facet-count" id="facet-count-dim-the_end">0</span>
+                </label>
+                <label class="facet-check">
+                  <input type="checkbox" value="the_nether" data-facet="dimension" />
+                  <span>Nether</span>
+                  <span class="facet-count" id="facet-count-dim-the_nether">0</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="popover-section">
+              <div class="popover-label">RAID ROUTE</div>
+              <label class="facet-check">
+                <input type="checkbox" id="facet-route-only" />
+                <span>In Active Raid Route Only</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Facet Chips -->
+        <div id="active-filter-chips" class="active-filter-chips"></div>
       </div>
 
       <div class="toolbar-right">
+        <!-- Search Input -->
         <div class="search-wrap">
           <input
             type="search"
             id="search-input"
             class="search-input"
-            placeholder="Filter bases, coords, loot..."
+            placeholder="Filter bases, coords, loot, biome..."
             autocomplete="off"
             aria-label="Filter bases"
           />
           <kbd class="search-kbd" id="search-kbd-hint">/</kbd>
         </div>
 
+        <!-- View / Column / Sort Options Popover (TanStack View Options Pattern) -->
+        <div class="popover-anchor">
+          <button
+            type="button"
+            class="btn-secondary btn-sm"
+            id="btn-toggle-display-pop"
+            aria-expanded="false"
+            aria-haspopup="dialog"
+            title="Configure sorting, optical crop, and table columns"
+          >
+            Display ▾
+          </button>
+
+          <div
+            id="popover-display"
+            class="popover-panel popover-display"
+            role="dialog"
+            aria-label="Display and column options"
+            hidden
+          >
+            <div class="popover-header">
+              <span class="popover-title">Display Options</span>
+              <button type="button" class="btn-icon-close" data-close-popover="popover-display" aria-label="Close">×</button>
+            </div>
+
+            <div class="popover-section">
+              <label for="sort-select" class="popover-label">SORT ORDER</label>
+              <div class="sort-control-row">
+                <select id="sort-select" class="form-select input-sm">
+                  <option value="priority">Status &amp; Loot Tier</option>
+                  <option value="plate">Plate Index (01–16)</option>
+                  <option value="distance">Distance from Origin</option>
+                  <option value="depth">Depth (Block Y)</option>
+                  <option value="name">Base Name (A–Z)</option>
+                </select>
+                <button type="button" class="btn-secondary btn-sm mono" id="btn-sort-dir" title="Toggle ascending / descending">
+                  ↑ ASC
+                </button>
+              </div>
+            </div>
+
+            <div class="popover-section" id="display-grid-options">
+              <div class="popover-label">GRID SCREENSHOT FRAMING</div>
+              <div class="segmented-full" id="toggle-crop-mode">
+                <button type="button" class="seg-item is-active" data-crop="subject">Subject Crop</button>
+                <button type="button" class="seg-item" data-crop="raw">Full F3 (1:1)</button>
+              </div>
+              <label class="facet-check" style="margin-top:8px;">
+                <input type="checkbox" id="toggle-card-vectors" checked />
+                <span>Show distance &amp; F3 yaw on cards</span>
+              </label>
+            </div>
+
+            <div class="popover-section" id="display-table-options">
+              <div class="popover-label">TABLE COLUMNS (TANSTACK VIEW)</div>
+              <div class="facet-options" id="table-col-toggles">
+                <label class="facet-check"><input type="checkbox" data-col="plate" checked /><span>Plate #</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="status" checked /><span>Status</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="tier" checked /><span>Loot Tier</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="loot" checked /><span>Loot &amp; Notes (Inline Edit)</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="ow" checked /><span>Overworld (X, Y, Z)</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="nether" checked /><span>Nether Roof (÷8)</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="vector" checked /><span>Δ Distance &amp; F3 Yaw</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="meta" /><span>Biome &amp; Region (.mca)</span></label>
+                <label class="facet-check"><input type="checkbox" data-col="players" /><span>Spotted Players</span></label>
+              </div>
+              <hr class="popover-divider" />
+              <label class="facet-check">
+                <input type="checkbox" id="toggle-table-preview" checked />
+                <span>Show side screenshot inspector in Table</span>
+              </label>
+              <label class="facet-check">
+                <input type="checkbox" id="toggle-table-compact" />
+                <span>Compact row density</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- View Switcher -->
         <nav class="view-segmented" aria-label="Display layout">
-          <button type="button" class="seg-item is-active" data-view="grid">Grid</button>
-          <button type="button" class="seg-item" data-view="table">Table</button>
-          <button type="button" class="seg-item" data-view="map">Map</button>
+          <button type="button" class="seg-item is-active" data-view="grid" title="Photo Grid View (Shortcut: 1)">Grid</button>
+          <button type="button" class="seg-item" data-view="table" title="Power Data Table View (Shortcut: 2)">Table</button>
+          <button type="button" class="seg-item" data-view="map" title="2D Coordinate Map &amp; Route View (Shortcut: 3)">Map</button>
         </nav>
       </div>
     </section>
 
     <!-- MAIN WORKSPACE -->
     <main class="main-content">
-      <!-- VIEW 1: GRID -->
+      <!-- VIEW 1: PHOTO GRID -->
       <section id="view-grid" class="view-section">
-        <div id="bases-grid" class="bases-grid"></div>
+        <div id="bases-grid" class="bases-grid crop-subject"></div>
       </section>
 
-      <!-- VIEW 2: TABLE -->
+      <!-- VIEW 2: POWER DATA TABLE (WITH INLINE EDITING & SIDE INSPECTOR) -->
       <section id="view-table" class="view-section" hidden>
-        <div class="table-surface">
-          <table class="bases-table">
-            <thead>
-              <tr>
-                <th class="th-sortable" data-sort="name">Base</th>
-                <th class="th-sortable" data-sort="status">Status</th>
-                <th>Loot &amp; Notes</th>
-                <th class="num th-sortable" data-sort="distance">Overworld (X, Y, Z)</th>
-                <th class="num">Nether Roof (÷8)</th>
-                <th class="num">Waypoint</th>
-              </tr>
-            </thead>
-            <tbody id="bases-tbody"></tbody>
-          </table>
+        <div class="table-workspace" id="table-workspace">
+          <div class="table-surface">
+            <div class="table-subbar">
+              <div class="table-subbar-left">
+                <span class="mono" id="table-row-summary">Showing 16 of 16 bases</span>
+                <span class="table-subbar-sep">·</span>
+                <span class="table-hint">Double-click Name or Loot to edit inline · Shift+Click checkboxes to range-select · Right-click row for actions</span>
+              </div>
+              <div class="table-subbar-right">
+                <button type="button" class="btn-link" id="btn-toggle-preview-inline">Hide Preview Pane</button>
+              </div>
+            </div>
+
+            <div class="table-scroll-wrap">
+              <table class="bases-table" id="bases-table" tabindex="0" aria-label="Reconnaissance coordinate table">
+                <thead>
+                  <tr>
+                    <th class="col-check">
+                      <input type="checkbox" id="table-check-all" aria-label="Select all visible rows" />
+                    </th>
+                    <th class="th-sortable" data-col-id="plate" data-sort="plate">#</th>
+                    <th class="th-sortable" data-col-id="name" data-sort="name">Base</th>
+                    <th class="th-sortable" data-col-id="status" data-sort="priority">Status</th>
+                    <th class="th-sortable" data-col-id="tier" data-sort="tier">Tier</th>
+                    <th data-col-id="loot">Loot &amp; Infrastructure</th>
+                    <th class="num th-sortable" data-col-id="ow" data-sort="x">Overworld (X, Y, Z)</th>
+                    <th class="num" data-col-id="nether">Nether Roof (÷8)</th>
+                    <th class="num th-sortable" data-col-id="vector" data-sort="distance">Δ Dist &amp; F3 Yaw</th>
+                    <th data-col-id="meta" hidden>Biome &amp; Region</th>
+                    <th data-col-id="players" hidden>Players</th>
+                    <th class="num">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="bases-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Docked Side Preview Pane in Table View -->
+          <aside class="table-preview-pane" id="table-preview-pane" aria-label="Selected row reconnaissance preview">
+            <div class="preview-pane-top">
+              <div>
+                <span class="mono preview-plate-tag" id="preview-plate">PLATE 01</span>
+                <h3 class="preview-title" id="preview-name">artap2</h3>
+              </div>
+              <div id="preview-status-slot"></div>
+            </div>
+
+            <div class="preview-media" id="preview-image-wrap">
+              <img id="preview-img" src="./plates/artap2.png" alt="Reconnaissance preview" />
+            </div>
+
+            <div class="preview-telemetry-list" id="preview-specs"></div>
+          </aside>
         </div>
       </section>
 
-      <!-- VIEW 3: 2D COORDINATE MAP -->
+      <!-- VIEW 3: 2D COORDINATE MAP & INTEGRATED ROUTE SEQUENCER -->
       <section id="view-map" class="view-section" hidden>
         <div class="map-frame">
           <div class="map-stage" id="radar-container">
             <canvas id="radar-canvas"></canvas>
+
             <div class="map-hud-top">
               <span class="hud-legend"><i class="status-dot dot-priority"></i> Priority</span>
               <span class="hud-legend"><i class="status-dot dot-scouted"></i> Scouted</span>
+              <span class="hud-legend"><i class="status-dot dot-compromised"></i> Alert</span>
               <span class="hud-legend"><i class="status-dot dot-raided"></i> Raided</span>
+              <span class="hud-sep">|</span>
+              <label class="hud-toggle">
+                <input type="checkbox" id="radar-show-regions" checked />
+                <span>512m Regions</span>
+              </label>
+              <label class="hud-toggle">
+                <input type="checkbox" id="radar-show-labels" checked />
+                <span>Labels</span>
+              </label>
+              <label class="hud-toggle">
+                <input type="checkbox" id="radar-nether-scale" />
+                <span>Nether Coords (÷8)</span>
+              </label>
             </div>
+
             <div class="map-hud-bottom">
-              <span class="map-coord-readout" id="radar-cursor-readout">X: 0, Z: 0</span>
+              <span class="map-coord-readout" id="radar-cursor-readout">X: 0, Z: 0 · Nether: 0, 0</span>
+              <span class="hud-sep">|</span>
+              <span class="hud-hint">Click node to inspect · Shift+Click node to add/remove Route stop</span>
               <button type="button" class="btn-link" id="radar-reset-view">Reset View</button>
             </div>
           </div>
-          <aside class="map-inspector" id="map-selected-card" hidden></aside>
+
+          <!-- Map Right Sidebar: Selected Base Inspector + Route Summary -->
+          <aside class="map-sidebar">
+            <div id="map-selected-card" class="map-inspector-section"></div>
+            <div class="map-route-section">
+              <div class="map-route-header">
+                <span class="popover-label">ACTIVE RAID ROUTE (<span id="map-route-count">0</span>)</span>
+                <div class="map-route-actions">
+                  <button type="button" class="btn-link" id="map-btn-route-priority">Queue Priority</button>
+                  <button type="button" class="btn-link" id="map-btn-route-optimize">Optimize</button>
+                  <button type="button" class="btn-link" id="map-btn-route-open">Full Planner →</button>
+                </div>
+              </div>
+              <div id="map-route-mini-list" class="map-route-mini-list"></div>
+            </div>
+          </aside>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- DETAIL & EDIT MODAL -->
+  <!-- FLOATING BULK ACTION BAR (Shown when 1+ bases are selected in Grid or Table) -->
+  <div id="bulk-action-bar" class="bulk-action-bar" role="region" aria-label="Bulk actions for selected bases" hidden>
+    <div class="bulk-count-group">
+      <span class="bulk-count-badge" id="bulk-selected-count">0 selected</span>
+      <button type="button" class="btn-link" id="btn-bulk-select-all">Select all</button>
+      <button type="button" class="btn-link" id="btn-bulk-clear">Clear</button>
+    </div>
+
+    <div class="bulk-divider"></div>
+
+    <div class="bulk-controls">
+      <div class="bulk-group">
+        <span class="bulk-label">Status:</span>
+        <button type="button" class="btn-secondary btn-xs" data-bulk-status="priority">
+          <span class="status-dot dot-priority"></span> Priority
+        </button>
+        <button type="button" class="btn-secondary btn-xs" data-bulk-status="scouted">
+          <span class="status-dot dot-scouted"></span> Scouted
+        </button>
+        <button type="button" class="btn-secondary btn-xs" data-bulk-status="compromised">
+          <span class="status-dot dot-compromised"></span> Alert
+        </button>
+        <button type="button" class="btn-secondary btn-xs" data-bulk-status="raided">
+          <span class="status-dot dot-raided"></span> Raided
+        </button>
+      </div>
+
+      <div class="bulk-divider"></div>
+
+      <div class="bulk-group">
+        <span class="bulk-label">Tier:</span>
+        <button type="button" class="btn-secondary btn-xs" data-bulk-tier="high">High</button>
+        <button type="button" class="btn-secondary btn-xs" data-bulk-tier="medium">Med</button>
+        <button type="button" class="btn-secondary btn-xs" data-bulk-tier="low">Low</button>
+      </div>
+
+      <div class="bulk-divider"></div>
+
+      <button type="button" class="btn-secondary btn-xs" id="btn-bulk-route">+ Add to Route</button>
+      <button type="button" class="btn-primary btn-xs" id="btn-bulk-xaero">Copy Xaero</button>
+      <button type="button" class="btn-danger btn-xs" id="btn-bulk-delete">Delete</button>
+    </div>
+  </div>
+
+  <!-- SLIDE-OVER RAID ROUTE PLANNER DRAWER -->
+  <div id="route-drawer-backdrop" class="drawer-backdrop" hidden>
+    <aside class="route-drawer" role="dialog" aria-modal="true" aria-labelledby="route-drawer-title">
+      <header class="modal-topbar">
+        <div>
+          <div class="popover-label">VECTOR SEQUENCER &amp; NETHER ROOF PATHFINDER</div>
+          <h2 class="modal-title" id="route-drawer-title">Raid Route Planner</h2>
+        </div>
+        <button type="button" class="btn-secondary btn-sm" id="btn-close-route-drawer">Esc</button>
+      </header>
+
+      <div class="route-drawer-controls">
+        <button type="button" class="btn-secondary btn-sm" id="btn-route-autopopulate" title="Add all Priority Overworld bases to route">
+          Queue All Priority
+        </button>
+        <button type="button" class="btn-secondary btn-sm" id="btn-route-optimize" title="Reorder stops using Nearest-Neighbor path from active Vector Origin">
+          Optimize Order (Nearest-Neighbor)
+        </button>
+        <button type="button" class="btn-secondary btn-sm" id="btn-route-clear">
+          Clear
+        </button>
+      </div>
+
+      <div class="route-metrics-strip">
+        <div class="route-metric-box">
+          <span class="popover-label">STOPS</span>
+          <strong class="mono" id="route-count">0</strong>
+        </div>
+        <div class="route-metric-box">
+          <span class="popover-label">OVERWORLD RUN</span>
+          <strong class="mono" id="route-dist-ow">0 m</strong>
+        </div>
+        <div class="route-metric-box">
+          <span class="popover-label">NETHER ROOF (÷8)</span>
+          <strong class="mono text-priority" id="route-dist-nether">0 m</strong>
+        </div>
+      </div>
+
+      <div class="route-legs-list" id="route-list"></div>
+
+      <footer class="route-drawer-footer">
+        <button type="button" class="btn-primary" id="btn-route-copy-xaero" style="width:100%;">
+          Copy Numbered Route for Xaero Chat (OW)
+        </button>
+        <button type="button" class="btn-secondary" id="btn-route-copy-nether" style="width:100%;">
+          Copy Nether Roof Portal Waypoints (X÷8, 128, Z÷8)
+        </button>
+      </footer>
+    </aside>
+  </div>
+
+  <!-- XAERO'S MINIMAP TELEMETRY & IMPORT/EXPORT STUDIO MODAL -->
+  <div id="xaero-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="xaero-modal-title">
+    <div class="modal-dialog modal-wide">
+      <header class="modal-topbar">
+        <div class="modal-heading-group">
+          <h2 class="modal-title" id="xaero-modal-title">Xaero's Minimap Waypoint Studio</h2>
+          <span class="modal-coord-pill">Export Chat Strings, Download mw$default_1.txt, or Import Waypoints</span>
+        </div>
+        <button type="button" class="btn-secondary btn-sm" id="xaero-modal-close">Esc</button>
+      </header>
+
+      <div class="xaero-studio-split">
+        <aside class="xaero-studio-sidebar">
+          <div class="form-group">
+            <label for="xaero-scope">Target Scope</label>
+            <select id="xaero-scope" class="form-select">
+              <option value="unraided">All Active (Unraided)</option>
+              <option value="priority">Priority Targets Only</option>
+              <option value="route">Active Raid Route Manifest</option>
+              <option value="selected">Currently Selected Bases</option>
+              <option value="all">All Cataloged Bases</option>
+              <option value="the_end">The End Dimension Only</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="xaero-coord-mode">Coordinate Projection</label>
+            <select id="xaero-coord-mode" class="form-select">
+              <option value="exact">Overworld Exact Block (X, Y, Z)</option>
+              <option value="nether_roof">Nether Roof Portal (X÷8, 128, Z÷8)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="xaero-set-name">Waypoint Set Identifier</label>
+            <input type="text" id="xaero-set-name" class="form-input mono" value="gui.xaero_default" />
+          </div>
+
+          <div class="facet-options" style="margin-top:4px;">
+            <label class="facet-check">
+              <input type="checkbox" id="xaero-prefix-plate" checked />
+              <span>Prefix with Plate / Route # (e.g. <code>01_artap2</code>)</span>
+            </label>
+            <label class="facet-check">
+              <input type="checkbox" id="xaero-include-tier" checked />
+              <span>Append Loot Tier &amp; Y-Depth (e.g. <code>[H Y:-18]</code>)</span>
+            </label>
+            <label class="facet-check">
+              <input type="checkbox" id="xaero-disable-raided" checked />
+              <span>Keep Raided bases as <code>disabled: true</code></span>
+            </label>
+          </div>
+
+          <hr class="popover-divider" />
+
+          <div class="form-group">
+            <label for="xaero-import-textarea">Import Xaero Waypoints (Reverse Ingestion)</label>
+            <p class="field-help">Paste <code>xaero-waypoint:...</code> chat lines or raw lines from a friend's <code>mw$default_1.txt</code> file to merge bases into this ledger.</p>
+            <textarea
+              id="xaero-import-textarea"
+              class="form-textarea mono"
+              rows="4"
+              placeholder="xaero-waypoint:PlayerBase:PB:-1200:40:3400:12:false:0:Internal-overworld-waypoints"
+            ></textarea>
+            <button type="button" class="btn-secondary" id="btn-xaero-import" style="margin-top:6px;">
+              Parse &amp; Import Waypoints
+            </button>
+          </div>
+        </aside>
+
+        <div class="xaero-studio-main">
+          <div class="xaero-output-card">
+            <div class="xaero-output-header">
+              <div>
+                <strong>In-Game Clickable Chat Strings (<code>xaero-waypoint:...</code>)</strong>
+                <div class="field-help">Paste into Minecraft chat to share clickable waypoints with your group</div>
+              </div>
+              <button type="button" class="btn-primary btn-sm" id="btn-copy-all-chat">Copy All Chat Lines</button>
+            </div>
+            <div class="xaero-chat-list" id="xaero-chat-list"></div>
+          </div>
+
+          <div class="xaero-output-card">
+            <div class="xaero-output-header">
+              <div>
+                <strong>Client Waypoint File (<code>mw$default_1.txt</code>)</strong>
+                <div class="field-help">Place inside <code>.minecraft/XaeroWaypoints/&lt;server&gt;/dim%0/</code></div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button type="button" class="btn-secondary btn-sm" id="btn-copy-file-text">Copy Raw Text</button>
+                <button type="button" class="btn-primary btn-sm" id="btn-download-xaero-file">Download mw$default_1.txt</button>
+              </div>
+            </div>
+            <pre class="xaero-code-pre mono" id="xaero-file-output"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL & EDIT DOSSIER MODAL (High-Res Plate Inspector + Optical Presets + Full Telemetry) -->
   <div id="dossier-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="dossier-title">
     <div class="modal-dialog modal-wide">
       <header class="modal-topbar">
         <div class="modal-heading-group">
+          <span class="mono preview-plate-tag" id="dossier-plate">PLATE 01</span>
           <h2 class="modal-title" id="dossier-title">artap2</h2>
-          <span class="modal-coord-pill" id="dossier-coords-sub">-4920, -18, -1237</span>
+          <span class="dim-pill" id="dossier-dim-badge">OVERWORLD</span>
         </div>
+
+        <div class="dossier-preset-bar" id="dossier-zoom-presets" role="group" aria-label="Optical zoom presets">
+          <button type="button" class="seg-item is-active" data-preset="full">1:1 Full Frame</button>
+          <button type="button" class="seg-item" data-preset="subject">Subject Vault</button>
+          <button type="button" class="seg-item" data-preset="f3_left">Left F3 (XYZ/Chunk)</button>
+          <button type="button" class="seg-item" data-preset="f3_right">Right F3 (Target Block)</button>
+        </div>
+
         <div class="modal-nav-group">
           <button type="button" class="btn-secondary btn-sm" id="dossier-prev" title="Previous base (←)">← Prev</button>
           <button type="button" class="btn-secondary btn-sm" id="dossier-next" title="Next base (→)">Next →</button>
@@ -153,27 +715,39 @@
             <img id="dossier-img" src="" alt="Base reconnaissance screenshot" draggable="false" />
           </div>
           <div class="dossier-media-bar">
-            <span class="media-hint">Scroll to zoom · Drag to pan · Double-click to reset</span>
+            <span class="media-hint" id="dossier-file-meta">Scroll to zoom · Drag to pan · Double-click to reset</span>
             <div class="media-actions">
               <button type="button" class="btn-secondary btn-sm" id="dossier-copy-xyz">Copy XYZ</button>
+              <button type="button" class="btn-secondary btn-sm" id="dossier-copy-nether">Copy Nether (÷8)</button>
               <button type="button" class="btn-primary btn-sm" id="dossier-copy-xaero">Copy Xaero Waypoint</button>
             </div>
           </div>
         </div>
 
         <form id="dossier-form" class="dossier-inspector-form">
-          <div class="form-group">
-            <label for="edit-name">Base / Player Name</label>
-            <input type="text" id="edit-name" class="form-input" required />
-          </div>
-
           <div class="form-row-2">
+            <div class="form-group">
+              <label for="edit-name">Base / Player Name</label>
+              <input type="text" id="edit-name" class="form-input" required />
+            </div>
             <div class="form-group">
               <label for="edit-status">Status</label>
               <select id="edit-status" class="form-select">
                 <option value="priority">Priority (To Raid)</option>
-                <option value="scouted">Scouted</option>
+                <option value="scouted">Scouted (Verified)</option>
+                <option value="compromised">Compromised / Alert</option>
                 <option value="raided">Raided (Cleared)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="edit-tier">Loot Tier</label>
+              <select id="edit-tier" class="form-select">
+                <option value="high">High (Stacked)</option>
+                <option value="medium">Medium (Storage/Farm)</option>
+                <option value="low">Low (Outpost)</option>
               </select>
             </div>
             <div class="form-group">
@@ -182,6 +756,18 @@
                 <option value="overworld">Overworld</option>
                 <option value="the_end">The End</option>
                 <option value="the_nether">Nether</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="edit-color">Xaero Color</label>
+              <select id="edit-color" class="form-select">
+                <option value="12">12 · Red</option>
+                <option value="14">14 · Yellow</option>
+                <option value="6">06 · Gold</option>
+                <option value="10">10 · Green</option>
+                <option value="11">11 · Aqua</option>
+                <option value="13">13 · Purple (End)</option>
+                <option value="7">07 · Grey</option>
               </select>
             </div>
           </div>
@@ -201,8 +787,23 @@
             </div>
           </div>
 
-          <div class="nether-callout" id="dossier-nether-readout">
-            Nether Roof Portal (÷8): -615, 128, -155
+          <!-- Computed Nether Roof, Distance & F3 Yaw Strip -->
+          <div class="computed-telemetry-grid" id="dossier-computed-strip"></div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="edit-biome">Biome</label>
+              <input type="text" id="edit-biome" class="form-input mono" />
+            </div>
+            <div class="form-group">
+              <label for="edit-region">Region / Chunk</label>
+              <input type="text" id="edit-region" class="form-input mono" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-players">Spotted Players (comma-separated)</label>
+            <input type="text" id="edit-players" class="form-input" placeholder="e.g. artap2, Ollkaka2013" />
           </div>
 
           <div class="form-group">
@@ -212,19 +813,22 @@
 
           <div class="form-group">
             <label for="edit-notes">Field Notes</label>
-            <textarea id="edit-notes" class="form-textarea" rows="4" placeholder="Spotted players, defenses, access notes..."></textarea>
+            <textarea id="edit-notes" class="form-textarea" rows="3" placeholder="Defenses, access tunnel, notes..."></textarea>
           </div>
 
           <div class="form-actions-bar">
             <button type="button" class="btn-danger" id="btn-delete-base">Delete Base</button>
-            <button type="submit" class="btn-primary">Save Changes</button>
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="btn-secondary" id="dossier-toggle-route">+ Route</button>
+              <button type="submit" class="btn-primary">Save Changes</button>
+            </div>
           </div>
         </form>
       </div>
     </div>
   </div>
 
-  <!-- ADD BASE MODAL -->
+  <!-- ADD BASE / F3 OCR MODAL -->
   <div id="ingest-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="ingest-heading">
     <div class="modal-dialog modal-narrow">
       <header class="modal-topbar">
@@ -237,7 +841,7 @@
           <input type="file" id="ingest-file-input" accept="image/png,image/jpeg,image/webp" hidden />
           <div id="ingest-preview-empty">
             <div class="upload-headline">Drop F3 screenshot or click to browse</div>
-            <div class="upload-caption" id="ocr-status-text">Optional — automatically reads player name and Block XYZ</div>
+            <div class="upload-caption" id="ocr-status-text">Optional — automatically reads player name, Block XYZ, Dimension &amp; Biome</div>
           </div>
           <img id="ingest-preview-img" src="" alt="Preview" hidden />
         </label>
@@ -252,6 +856,7 @@
             <select id="new-status" class="form-select">
               <option value="priority">Priority (To Raid)</option>
               <option value="scouted" selected>Scouted</option>
+              <option value="compromised">Compromised / Alert</option>
               <option value="raided">Raided</option>
             </select>
           </div>
@@ -272,7 +877,11 @@
           </div>
         </div>
 
-        <div class="form-row-2">
+        <div class="nether-callout mono" id="new-nether-preview">
+          Nether Roof (÷8): Enter X and Z above
+        </div>
+
+        <div class="form-row-3">
           <div class="form-group">
             <label for="new-dimension">Dimension</label>
             <select id="new-dimension" class="form-select">
@@ -282,7 +891,26 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="new-containers">Loot Summary</label>
+            <label for="new-tier">Loot Tier</label>
+            <select id="new-tier" class="form-select">
+              <option value="high">High (Stacked)</option>
+              <option value="medium" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-biome">Biome</label>
+            <input type="text" id="new-biome" class="form-input mono" placeholder="plains" />
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="new-players">Spotted Players</label>
+            <input type="text" id="new-players" class="form-input" placeholder="Comma-separated" />
+          </div>
+          <div class="form-group">
+            <label for="new-containers">Loot / Infrastructure</label>
             <input type="text" id="new-containers" class="form-input" placeholder="e.g. 2 shulkers, villager hall" />
           </div>
         </div>
@@ -300,8 +928,39 @@
     </div>
   </div>
 
+  <!-- COMMAND PALETTE MODAL (Ctrl+K / ⌘K) -->
+  <div id="cmd-modal" class="modal-backdrop cmd-backdrop" hidden role="dialog" aria-modal="true" aria-label="Command Menu">
+    <div class="cmd-dialog">
+      <div class="cmd-input-wrap">
+        <span class="cmd-prompt-icon">›</span>
+        <input
+          type="text"
+          id="cmd-input"
+          class="cmd-input"
+          placeholder="Type a command, base name, or coordinate (e.g. 'optimize', 'nether', 'artap2')..."
+          autocomplete="off"
+          aria-autocomplete="list"
+          aria-controls="cmd-list"
+        />
+        <kbd class="kbd-token">ESC</kbd>
+      </div>
+      <div id="cmd-list" class="cmd-list" role="listbox"></div>
+      <div class="cmd-footer">
+        <span><kbd class="kbd-token">↑↓</kbd> Navigate</span>
+        <span><kbd class="kbd-token">↵</kbd> Execute</span>
+        <span><kbd class="kbd-token">ESC</kbd> Close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCOPED CONTEXT MENU (Right-Click or ⋯ Button on any Card / Row) -->
+  <div id="context-menu" class="context-menu" role="menu" hidden></div>
+
+  <!-- INLINE DROPDOWN POPOVER (For instant Status / Tier selection in Table & Grid) -->
+  <div id="inline-picker" class="context-menu inline-picker" role="menu" hidden></div>
+
   <!-- Toast -->
-  <div id="toast-bar" class="toast-bar" hidden></div>
+  <div id="toast-bar" class="toast-bar" role="status" aria-live="polite" hidden></div>
 
   <script src="./app.js"></script>
 </body>
