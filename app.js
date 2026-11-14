@@ -445,11 +445,13 @@
   // ============================================================================
 
   const LABEL_OFFSETS = {
-    dort930656: { dx: 10, dy: -7 },
-    dort930656_2: { dx: 10, dy: 14 },
-    monalokal2011: { dx: 10, dy: -7 },
-    monalokal2011_2: { dx: 10, dy: 14 },
-    frrrupy: { dx: 10, dy: 14 }
+    dort930656: { dx: 9, dy: -7 },
+    dort930656_2: { dx: 9, dy: -6 },
+    monalokal2011: { dx: 9, dy: -6 },
+    monalokal2011_2: { dx: 9, dy: -6 },
+    frrrupy: { dx: 9, dy: 14 },
+    nemvagyok2: { dx: 9, dy: -6 },
+    SPKIY: { dx: 9, dy: 12 }
   };
 
   function drawMapCanvas() {
@@ -472,8 +474,8 @@
     ctx.fillStyle = '#080908';
     ctx.fillRect(0, 0, W, H);
 
-    // 25,200 block span ensures ±10,000 world border has generous padding
-    const worldSpan = 25200 / state.radar.zoom;
+    // 26,800 block span ensures ±10,000 world border has generous padding
+    const worldSpan = 26800 / state.radar.zoom;
     const pxPerBlock = Math.min(W, H) / worldSpan;
 
     const toScreenX = wx => W / 2 + (wx - state.radar.centerX) * pxPerBlock;
@@ -886,7 +888,7 @@
     if (canvas) {
       const getTransform = () => {
         const rect = canvas.getBoundingClientRect();
-        const worldSpan = 25200 / state.radar.zoom;
+        const worldSpan = 26800 / state.radar.zoom;
         const pxPerBlock = Math.min(rect.width, rect.height) / worldSpan;
         return { rect, pxPerBlock };
       };
