@@ -3,684 +3,287 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RECON // SMP Cartographic &amp; Xaero Telemetry Ledger</title>
+  <title>SMP Bases</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- Global Drag-and-Drop Overlay for Screenshot Ingestion -->
+  <!-- Drag-and-Drop Overlay -->
   <div id="dropzone-overlay" class="dropzone-overlay" hidden>
     <div class="dropzone-frame">
-      <div class="dropzone-index">OPTICAL INGESTION // F3 TELEMETRY PLATE</div>
-      <div class="dropzone-title">Drop Minecraft F3 Screenshot to Catalog Target</div>
-      <div class="dropzone-sub">Automatically extracts filename identifier, Block XYZ, Dimension, Region, and Biome</div>
+      <div class="dropzone-title">Drop Screenshot to Add Base</div>
+      <div class="dropzone-sub">Reads player name and F3 coordinates automatically</div>
     </div>
   </div>
 
-  <!-- Top Structural Masthead -->
-  <header class="masthead">
-    <div class="masthead-brand">
-      <div class="masthead-code">INDEX // 26.3-SMP</div>
-      <h1 class="masthead-title">Cartographic Reconnaissance Ledger</h1>
-    </div>
-
-    <div class="masthead-metrics" id="masthead-metrics">
-      <div class="metric-cell">
-        <span class="metric-label">PLATES</span>
-        <span class="metric-value" id="stat-total">16</span>
+  <div class="page-shell">
+    <!-- Minimal Header -->
+    <header class="site-header">
+      <div class="header-left">
+        <h1 class="site-title">Bases</h1>
+        <span class="site-count" id="header-summary">16 targets</span>
       </div>
-      <div class="metric-cell">
-        <span class="metric-label">PRIORITY</span>
-        <span class="metric-value metric-vermilion" id="stat-priority">9</span>
+
+      <nav class="view-switch" aria-label="View mode">
+        <button type="button" class="view-btn is-active" data-view="grid">Grid</button>
+        <button type="button" class="view-btn" data-view="table">Table</button>
+        <button type="button" class="view-btn" data-view="map">Map</button>
+      </nav>
+
+      <div class="header-right">
+        <button type="button" class="btn-ghost" id="btn-export-xaero" title="Copy all active unraided waypoints for Xaero's Minimap">
+          Copy All Xaero
+        </button>
+        <button type="button" class="btn-ghost" id="btn-download-xaero" title="Download mw$default_1.txt waypoint file">
+          Download .txt
+        </button>
+        <button type="button" class="btn-primary" id="btn-open-ingest">
+          + Add Base
+        </button>
       </div>
-      <div class="metric-cell">
-        <span class="metric-label">SCOUTED</span>
-        <span class="metric-value" id="stat-scouted">7</span>
+    </header>
+
+    <!-- Minimal Filter Bar -->
+    <section class="filter-bar">
+      <div class="status-tabs" id="filter-status">
+        <button type="button" class="status-tab is-active" data-status="all">
+          All <span class="tab-count" id="count-all">16</span>
+        </button>
+        <button type="button" class="status-tab" data-status="priority">
+          Priority <span class="tab-count" id="count-priority">9</span>
+        </button>
+        <button type="button" class="status-tab" data-status="scouted">
+          Scouted <span class="tab-count" id="count-scouted">7</span>
+        </button>
+        <button type="button" class="status-tab" data-status="raided">
+          Raided <span class="tab-count" id="count-raided">0</span>
+        </button>
       </div>
-      <div class="metric-cell">
-        <span class="metric-label">RAIDED</span>
-        <span class="metric-value metric-muted" id="stat-raided">0</span>
+
+      <div class="filter-controls">
+        <input
+          type="search"
+          id="search-input"
+          class="search-input"
+          placeholder="Search name, coords, notes..."
+          autocomplete="off"
+        />
       </div>
-      <div class="metric-cell">
-        <span class="metric-label">ROUTE</span>
-        <span class="metric-value" id="stat-route">0</span>
-      </div>
-    </div>
-
-    <nav class="masthead-nav" aria-label="Operational Modes">
-      <button type="button" class="nav-tab is-active" data-view="plates">
-        <span class="nav-num">01</span>
-        <span class="nav-text">PLATES</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="ledger">
-        <span class="nav-num">02</span>
-        <span class="nav-text">LEDGER</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="cartography">
-        <span class="nav-num">03</span>
-        <span class="nav-text">CARTOGRAPHY</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="xaero">
-        <span class="nav-num">04</span>
-        <span class="nav-text">XAERO I/O</span>
-      </button>
-    </nav>
-
-    <div class="masthead-actions">
-      <button type="button" class="btn-primary" id="btn-open-ingest">+ INGEST TARGET</button>
-    </div>
-  </header>
-
-  <!-- Untracked Folder Files Notice (if new screenshots dropped into folder) -->
-  <div id="untracked-banner" class="untracked-banner" hidden>
-    <div class="untracked-info">
-      <span class="untracked-tag">UNINDEXED ASSETS DETECTED</span>
-      <span id="untracked-list-text"></span>
-    </div>
-    <div class="untracked-actions" id="untracked-buttons"></div>
-  </div>
-
-  <!-- Secondary Control & Telemetry Filter Bar -->
-  <section class="control-bar" aria-label="Filtering and Vector Controls">
-    <div class="control-group control-search">
-      <label for="search-input" class="control-label">QUERY</label>
-      <input
-        type="search"
-        id="search-input"
-        class="input-flat"
-        placeholder="Filter player, biome, container, region..."
-        autocomplete="off"
-      />
-    </div>
-
-    <div class="control-group">
-      <span class="control-label">STATUS</span>
-      <div class="segmented-group" id="filter-status">
-        <button type="button" class="seg-btn is-active" data-status="all">ALL</button>
-        <button type="button" class="seg-btn" data-status="priority">PRIORITY</button>
-        <button type="button" class="seg-btn" data-status="scouted">SCOUTED</button>
-        <button type="button" class="seg-btn" data-status="compromised">COMPROMISED</button>
-        <button type="button" class="seg-btn" data-status="raided">RAIDED</button>
-      </div>
-    </div>
-
-    <div class="control-group">
-      <span class="control-label">VALUE TIER</span>
-      <div class="segmented-group" id="filter-tier">
-        <button type="button" class="seg-btn is-active" data-tier="all">ALL</button>
-        <button type="button" class="seg-btn" data-tier="high">HIGH</button>
-        <button type="button" class="seg-btn" data-tier="medium">MED</button>
-        <button type="button" class="seg-btn" data-tier="low">LOW</button>
-      </div>
-    </div>
-
-    <div class="control-group">
-      <span class="control-label">DIMENSION</span>
-      <div class="segmented-group" id="filter-dim">
-        <button type="button" class="seg-btn is-active" data-dim="all">ALL</button>
-        <button type="button" class="seg-btn" data-dim="overworld">OVERWORLD</button>
-        <button type="button" class="seg-btn" data-dim="the_end">THE END</button>
-        <button type="button" class="seg-btn" data-dim="the_nether">NETHER</button>
-      </div>
-    </div>
-
-    <div class="control-group">
-      <label for="origin-select" class="control-label">VECTOR ORIGIN</label>
-      <select id="origin-select" class="select-flat" title="Measure distances and F3 yaw bearings from this point">
-        <option value="0,0">WORLD SPAWN (0, 0)</option>
-      </select>
-    </div>
-
-    <div class="control-group" id="plate-crop-control">
-      <span class="control-label">OPTICAL CROP</span>
-      <div class="segmented-group" id="toggle-crop-mode">
-        <button type="button" class="seg-btn is-active" data-crop="subject" title="Focus on base interior subject">SUBJECT</button>
-        <button type="button" class="seg-btn" data-crop="raw" title="Show full uncropped F3 screenshot">FULL F3</button>
-      </div>
-    </div>
-
-    <div class="control-group control-sort">
-      <label for="sort-select" class="control-label">ORDER</label>
-      <select id="sort-select" class="select-flat">
-        <option value="plate">PLATE INDEX (01–16)</option>
-        <option value="priority">STATUS &amp; TIER</option>
-        <option value="distance">DISTANCE FROM ORIGIN</option>
-        <option value="depth">DEPTH (Y-ELEVATION)</option>
-        <option value="name">IDENTIFIER (A–Z)</option>
-      </select>
-    </div>
-  </section>
-
-  <!-- MAIN WORKSPACE VIEWS -->
-  <main class="workspace">
-    <!-- VIEW 01: CONTACT SHEET (PLATES) -->
-    <section id="view-plates" class="view-pane is-active" aria-label="Photographic Contact Sheet">
-      <div id="plates-grid" class="plates-grid"></div>
     </section>
 
-    <!-- VIEW 02: COORDINATE LEDGER (TABLE) -->
-    <section id="view-ledger" class="view-pane" hidden aria-label="Tabular Coordinate Ledger">
-      <div class="ledger-toolbar">
-        <div class="ledger-selection-info">
-          <span id="ledger-selected-count">0 SELECTED</span>
-          <div class="ledger-bulk-btns" id="ledger-bulk-actions" hidden>
-            <button type="button" class="btn-Action" data-bulk-status="priority">MARK PRIORITY</button>
-            <button type="button" class="btn-Action" data-bulk-status="scouted">MARK SCOUTED</button>
-            <button type="button" class="btn-Action" data-bulk-status="raided">MARK RAIDED</button>
-            <button type="button" class="btn-Action" id="btn-bulk-route">+ ADD TO ROUTE</button>
-            <button type="button" class="btn-Action" id="btn-bulk-xaero">COPY XAERO CHAT</button>
-          </div>
-        </div>
-        <div class="ledger-hint">
-          Click any coordinate cell to copy · Click column headers to sort · Hover row to preview reconnaissance plate
-        </div>
-      </div>
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <!-- VIEW 1: MINIMAL GRID -->
+      <section id="view-grid" class="view-section">
+        <div id="bases-grid" class="bases-grid"></div>
+      </section>
 
-      <div class="ledger-split">
-        <div class="ledger-table-wrap">
-          <table class="ledger-table">
+      <!-- VIEW 2: MINIMAL TABLE -->
+      <section id="view-table" class="view-section" hidden>
+        <div class="table-wrap">
+          <table class="bases-table">
             <thead>
               <tr>
-                <th class="col-check"><input type="checkbox" id="ledger-check-all" aria-label="Select all rows" /></th>
-                <th class="col-plate" data-sort="plate">PLT</th>
-                <th class="col-name" data-sort="name">TARGET IDENTIFIER</th>
-                <th class="col-status" data-sort="priority">STATUS</th>
-                <th class="col-tier" data-sort="tier">TIER</th>
-                <th class="col-dim">DIM</th>
-                <th class="col-num" data-sort="x">BLOCK X</th>
-                <th class="col-num" data-sort="depth">BLOCK Y</th>
-                <th class="col-num" data-sort="z">BLOCK Z</th>
-                <th class="col-num">NETHER X</th>
-                <th class="col-num">NETHER Z</th>
-                <th class="col-num" data-sort="distance">Δ DIST (OW / N)</th>
-                <th class="col-num">F3 YAW</th>
-                <th class="col-meta">BIOME &amp; REGION</th>
-                <th class="col-actions">TELEMETRY</th>
+                <th>Base</th>
+                <th>Status</th>
+                <th class="num">Coords (X, Y, Z)</th>
+                <th class="num">Nether (÷8)</th>
+                <th>Notes</th>
+                <th class="num">Actions</th>
               </tr>
             </thead>
-            <tbody id="ledger-tbody"></tbody>
+            <tbody id="bases-tbody"></tbody>
           </table>
         </div>
+      </section>
 
-        <!-- Pinned Side Preview in Ledger View -->
-        <aside class="ledger-preview" id="ledger-preview">
-          <div class="preview-header">
-            <span class="preview-plate" id="preview-plate">PLATE 01</span>
-            <span class="preview-name" id="preview-name">artap2</span>
-          </div>
-          <div class="preview-image-frame" id="preview-image-wrap">
-            <img id="preview-img" src="./plates/artap2.png" alt="Reconnaissance preview" />
-          </div>
-          <div class="preview-specs" id="preview-specs"></div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- VIEW 03: SPATIAL PLOT & RAID ROUTE SEQUENCER (CARTOGRAPHY) -->
-    <section id="view-cartography" class="view-pane" hidden aria-label="2D Spatial Coordinate Radar">
-      <div class="cartography-layout">
-        <div class="radar-stage">
-          <div class="radar-statusbar">
-            <div class="radar-status-left">
-              <span class="radar-tag">PROJECTION // ORTHOGRAPHIC X·Z</span>
-              <span class="radar-Readout" id="radar-cursor-readout">CURSOR: X 0 · Z 0 (NETHER: 0, 0)</span>
-            </div>
-            <div class="radar-controls">
-              <label class="radar-check">
-                <input type="checkbox" id="radar-show-regions" checked />
-                <span>512m REGION GRID</span>
-              </label>
-              <label class="radar-check">
-                <input type="checkbox" id="radar-show-labels" checked />
-                <span>CALLOUT LABELS</span>
-              </label>
-              <label class="radar-check">
-                <input type="checkbox" id="radar-nether-scale" />
-                <span>NETHER ROOF COORDS (÷8)</span>
-              </label>
-              <button type="button" class="btn-Action" id="radar-reset-view">RESET EXTENTS (±10,500)</button>
-            </div>
-          </div>
-
-          <div class="radar-canvas-container" id="radar-container">
+      <!-- VIEW 3: MINIMAL 2D MAP -->
+      <section id="view-map" class="view-section" hidden>
+        <div class="map-container">
+          <div class="map-stage" id="radar-container">
             <canvas id="radar-canvas"></canvas>
-            <div class="radar-compass">
-              <div>NORTH (−Z)</div>
-              <div class="compass-cross">+</div>
-              <div>10,000m WORLD BORDER</div>
+            <div class="map-legend">
+              <span class="map-coord-readout" id="radar-cursor-readout">0, 0</span>
+              <button type="button" class="btn-text" id="radar-reset-view">Reset Zoom</button>
             </div>
           </div>
+          <aside class="map-card" id="map-selected-card" hidden></aside>
         </div>
+      </section>
+    </main>
+  </div>
 
-        <aside class="route-sidebar">
-          <div class="route-header">
-            <div>
-              <div class="section-kicker">VECTOR SEQUENCER</div>
-              <h2 class="section-heading">Raid Route Manifest</h2>
-            </div>
-            <div class="route-header-btns">
-              <button type="button" class="btn-Action" id="btn-route-autopopulate" title="Queue all Priority Overworld targets">QUEUE PRIORITY</button>
-              <button type="button" class="btn-Action" id="btn-route-optimize" title="Sort stops using Nearest-Neighbor from Origin">OPTIMIZE PATH</button>
-              <button type="button" class="btn-Action" id="btn-route-clear">CLEAR</button>
-            </div>
-          </div>
-
-          <div class="route-summary" id="route-summary">
-            <div class="route-stat">
-              <span class="route-stat-label">STOPS</span>
-              <span class="route-stat-val" id="route-count">0</span>
-            </div>
-            <div class="route-stat">
-              <span class="route-stat-label">OVERWORLD RUN</span>
-              <span class="route-stat-val" id="route-dist-ow">0 m</span>
-            </div>
-            <div class="route-stat">
-              <span class="route-stat-label">NETHER ROOF (÷8)</span>
-              <span class="route-stat-val metric-vermilion" id="route-dist-nether">0 m</span>
-            </div>
-          </div>
-
-          <div class="route-list" id="route-list"></div>
-
-          <div class="route-footer">
-            <button type="button" class="btn-primary btn-full" id="btn-route-copy-xaero">
-              COPY NUMBERED ROUTE FOR XAERO CHAT
-            </button>
-            <button type="button" class="btn-secondary btn-full" id="btn-route-copy-nether">
-              COPY NETHER ROOF PORTAL WAYPOINTS (÷8)
-            </button>
-          </div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- VIEW 04: XAERO'S MINIMAP TELEMETRY & FILE I/O -->
-    <section id="view-xaero" class="view-pane" hidden aria-label="Xaero's Minimap Integration Studio">
-      <div class="xaero-layout">
-        <aside class="xaero-config">
-          <div class="section-kicker">TELEMETRY COMPILER</div>
-          <h2 class="section-heading">Xaero's Minimap Parameters</h2>
-          <p class="xaero-desc">
-            Compile target coordinates into in-game clickable chat lines or generate a complete
-            <code>mw$default_1.txt</code> waypoint file for your squad.
-          </p>
-
-          <div class="form-stack">
-            <div class="form-field">
-              <label for="xaero-scope" class="field-label">TARGET SCOPE</label>
-              <select id="xaero-scope" class="select-flat">
-                <option value="unraided">ALL ACTIVE (PRIORITY + SCOUTED)</option>
-                <option value="priority">PRIORITY TARGETS ONLY</option>
-                <option value="route">CURRENT RAID ROUTE MANIFEST</option>
-                <option value="all">ALL CATALOGED PLATES (16)</option>
-                <option value="the_end">THE END DIMENSION ONLY</option>
-              </select>
-            </div>
-
-            <div class="form-field">
-              <label for="xaero-coord-mode" class="field-label">COORDINATE PROJECTION</label>
-              <select id="xaero-coord-mode" class="select-flat">
-                <option value="exact">EXACT TARGET BLOCK (X, Y, Z)</option>
-                <option value="nether_roof">NETHER ROOF PORTAL VECTOR (X÷8, 128, Z÷8)</option>
-              </select>
-            </div>
-
-            <div class="form-field">
-              <label for="xaero-set-name" class="field-label">WAYPOINT SET IDENTIFIER</label>
-              <input type="text" id="xaero-set-name" class="input-flat" value="gui.xaero_default" />
-            </div>
-
-            <div class="form-field">
-              <label class="field-check">
-                <input type="checkbox" id="xaero-prefix-plate" checked />
-                <span>Prefix waypoint names with Plate / Route index (e.g. <code>01_artap2</code>)</span>
-              </label>
-            </div>
-
-            <div class="form-field">
-              <label class="field-check">
-                <input type="checkbox" id="xaero-include-tier" checked />
-                <span>Append loot tier &amp; Y-depth tag (e.g. <code>[H Y:-18]</code>)</span>
-              </label>
-            </div>
-
-            <div class="form-field">
-              <label class="field-check">
-                <input type="checkbox" id="xaero-disable-raided" checked />
-                <span>Set <code>disabled: true</code> on Raided bases instead of omitting</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="xaero-import-box">
-            <div class="section-kicker">REVERSE INGESTION</div>
-            <h3 class="import-heading">Import Xaero Waypoints</h3>
-            <p class="xaero-desc">
-              Paste <code>xaero-waypoint:...</code> chat lines or raw lines from a friend's <code>mw$default_1.txt</code> file to merge targets into this ledger.
-            </p>
-            <textarea
-              id="xaero-import-textarea"
-              class="textarea-flat"
-              rows="4"
-              placeholder="waypoint:PlayerBase:P:-1200:40:3400:12:false:0:gui.xaero_default..."
-            ></textarea>
-            <button type="button" class="btn-secondary btn-full" id="btn-xaero-import">
-              PARSE &amp; MERGE WAYPOINTS
-            </button>
-          </div>
-        </aside>
-
-        <div class="xaero-outputs">
-          <!-- Output Pane 1: In-Game Chat Share Lines -->
-          <div class="xaero-pane">
-            <div class="xaero-pane-header">
-              <div>
-                <div class="section-kicker">FORMAT 01 // IN-GAME CLIPBOARD &amp; PARTY CHAT</div>
-                <h3 class="pane-title">Clickable Chat Share Strings (<code>xaero-waypoint:...</code>)</h3>
-              </div>
-              <div class="pane-actions">
-                <button type="button" class="btn-primary" id="btn-copy-all-chat">COPY ALL CHAT LINES</button>
-              </div>
-            </div>
-            <div class="xaero-chat-list" id="xaero-chat-list"></div>
-          </div>
-
-          <!-- Output Pane 2: Raw mw$default_1.txt Waypoint File -->
-          <div class="xaero-pane">
-            <div class="xaero-pane-header">
-              <div>
-                <div class="section-kicker">FORMAT 02 // DIRECT CLIENT FILE</div>
-                <h3 class="pane-title">Xaero Waypoint File (<code>.minecraft/XaeroWaypoints/.../mw$default_1.txt</code>)</h3>
-              </div>
-              <div class="pane-actions">
-                <button type="button" class="btn-Action" id="btn-copy-file-text">COPY RAW FILE</button>
-                <button type="button" class="btn-primary" id="btn-download-xaero-file">DOWNLOAD mw$default_1.txt</button>
-              </div>
-            </div>
-            <pre class="xaero-code-block" id="xaero-file-output"></pre>
-          </div>
+  <!-- DETAIL & EDIT MODAL -->
+  <div id="dossier-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true">
+    <div class="modal-sheet modal-sheet-wide">
+      <header class="modal-header">
+        <div class="modal-title-wrap">
+          <h2 class="modal-title" id="dossier-title">artap2</h2>
+          <span class="modal-sub" id="dossier-coords-sub">-4920, -18, -1237</span>
         </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- RECONNAISSANCE DOSSIER MODAL (High-Res Plate Inspector + Loupe + Editor) -->
-  <div id="dossier-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="dossier-title">
-    <div class="dossier-sheet">
-      <header class="dossier-topbar">
-        <div class="dossier-id-group">
-          <span class="dossier-plate-num" id="dossier-plate">PLATE 01</span>
-          <h2 class="dossier-title" id="dossier-title">artap2</h2>
-          <span class="dossier-dim-tag" id="dossier-dim-badge">OVERWORLD</span>
-        </div>
-
-        <div class="dossier-optical-bar">
-          <span class="control-label">OPTICAL PRESET</span>
-          <div class="segmented-group" id="dossier-zoom-presets">
-            <button type="button" class="seg-btn is-active" data-preset="full">01 FULL FRAME (1:1)</button>
-            <button type="button" class="seg-btn" data-preset="subject">02 SUBJECT VAULT</button>
-            <button type="button" class="seg-btn" data-preset="f3_left">03 LEFT F3 (XYZ / CHUNK)</button>
-            <button type="button" class="seg-btn" data-preset="f3_right">04 RIGHT F3 (TARGET BLOCK)</button>
-          </div>
-        </div>
-
-        <div class="dossier-nav-btns">
-          <button type="button" class="btn-Action" id="dossier-prev" title="Previous Plate (←)">← PREV</button>
-          <button type="button" class="btn-Action" id="dossier-next" title="Next Plate (→)">NEXT →</button>
-          <button type="button" class="btn-Action btn-close" id="dossier-close" title="Close (Esc)">CLOSE [ESC]</button>
+        <div class="modal-header-actions">
+          <button type="button" class="btn-ghost" id="dossier-prev">← Prev</button>
+          <button type="button" class="btn-ghost" id="dossier-next">Next →</button>
+          <button type="button" class="btn-ghost" id="dossier-close">Close</button>
         </div>
       </header>
 
-      <div class="dossier-body">
-        <!-- Left: Interactive Optical Plate Viewer -->
-        <div class="dossier-viewport-col">
-          <div class="dossier-viewport" id="dossier-viewport">
-            <img id="dossier-img" src="" alt="Reconnaissance Plate" draggable="false" />
-            <div class="viewport-crosshair" id="viewport-crosshair" hidden></div>
+      <div class="dossier-layout">
+        <div class="dossier-image-col">
+          <div class="dossier-viewport" id="dossier-viewport" title="Scroll to zoom, drag to pan, double-click to reset">
+            <img id="dossier-img" src="" alt="Base screenshot" draggable="false" />
           </div>
-          <div class="dossier-viewport-footer">
-            <span id="dossier-file-meta">FILE: artap2.png · SCROLL TO ZOOM · DRAG TO PAN</span>
-            <div class="viewport-quick-copy">
-              <button type="button" class="btn-Action" id="dossier-copy-xyz">COPY XYZ</button>
-              <button type="button" class="btn-Action" id="dossier-copy-nether">COPY NETHER (÷8)</button>
-              <button type="button" class="btn-primary" id="dossier-copy-xaero">COPY XAERO WAYPOINT</button>
+          <div class="dossier-image-bar">
+            <span class="muted-hint">Scroll to zoom · Drag to pan · Double-click to reset</span>
+            <div class="quick-copy-row">
+              <button type="button" class="btn-ghost" id="dossier-copy-xyz">Copy XYZ</button>
+              <button type="button" class="btn-primary" id="dossier-copy-xaero">Copy Xaero Waypoint</button>
             </div>
           </div>
         </div>
 
-        <!-- Right: Editable Field Dossier & Telemetry Form -->
-        <form id="dossier-form" class="dossier-form-col">
-          <div class="dossier-section">
-            <div class="section-kicker">OPERATIONAL CLASSIFICATION</div>
-            <div class="form-row-2">
-              <div class="form-field">
-                <label class="field-label" for="edit-name">TARGET IDENTIFIER</label>
-                <input type="text" id="edit-name" class="input-flat" required />
-              </div>
-              <div class="form-field">
-                <label class="field-label" for="edit-status">RAID STATUS</label>
-                <select id="edit-status" class="select-flat">
-                  <option value="priority">PRIORITY TARGET</option>
-                  <option value="scouted">SCOUTED / VERIFIED</option>
-                  <option value="compromised">COMPROMISED / ALERT</option>
-                  <option value="raided">RAIDED / DEPLETED</option>
-                </select>
-              </div>
-            </div>
+        <form id="dossier-form" class="dossier-form">
+          <div class="field">
+            <label for="edit-name">Base / Player Name</label>
+            <input type="text" id="edit-name" class="input" required />
+          </div>
 
-            <div class="form-row-3">
-              <div class="form-field">
-                <label class="field-label" for="edit-tier">LOOT TIER</label>
-                <select id="edit-tier" class="select-flat">
-                  <option value="high">HIGH (SHULKERS / STACKED)</option>
-                  <option value="medium">MEDIUM (STORAGE / FARM)</option>
-                  <option value="low">LOW (OUTPOST / SHELL)</option>
-                </select>
-              </div>
-              <div class="form-field">
-                <label class="field-label" for="edit-dimension">DIMENSION</label>
-                <select id="edit-dimension" class="select-flat">
-                  <option value="overworld">minecraft:overworld</option>
-                  <option value="the_end">minecraft:the_end</option>
-                  <option value="the_nether">minecraft:the_nether</option>
-                </select>
-              </div>
-              <div class="form-field">
-                <label class="field-label" for="edit-color">XAERO COLOR CODE</label>
-                <select id="edit-color" class="select-flat">
-                  <option value="12">12 · Red (Priority)</option>
-                  <option value="14">14 · Yellow</option>
-                  <option value="6">06 · Gold</option>
-                  <option value="10">10 · Green</option>
-                  <option value="11">11 · Aqua</option>
-                  <option value="13">13 · Light Purple (End)</option>
-                  <option value="5">05 · Dark Purple</option>
-                  <option value="9">09 · Blue</option>
-                  <option value="7">07 · Grey</option>
-                  <option value="15">15 · White</option>
-                </select>
-              </div>
+          <div class="field-row-2">
+            <div class="field">
+              <label for="edit-status">Status</label>
+              <select id="edit-status" class="select">
+                <option value="priority">Priority (To Raid)</option>
+                <option value="scouted">Scouted</option>
+                <option value="raided">Raided (Done)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="edit-dimension">Dimension</label>
+              <select id="edit-dimension" class="select">
+                <option value="overworld">Overworld</option>
+                <option value="the_end">The End</option>
+                <option value="the_nether">Nether</option>
+              </select>
             </div>
           </div>
 
-          <div class="dossier-section">
-            <div class="section-kicker">SPATIAL TELEMETRY (BETTERF3)</div>
-            <div class="form-row-3">
-              <div class="form-field">
-                <label class="field-label" for="edit-x">BLOCK X</label>
-                <input type="number" id="edit-x" class="input-flat input-mono" required />
-              </div>
-              <div class="form-field">
-                <label class="field-label" for="edit-y">BLOCK Y</label>
-                <input type="number" id="edit-y" class="input-flat input-mono" required />
-              </div>
-              <div class="form-field">
-                <label class="field-label" for="edit-z">BLOCK Z</label>
-                <input type="number" id="edit-z" class="input-flat input-mono" required />
-              </div>
+          <div class="field-row-3">
+            <div class="field">
+              <label for="edit-x">X</label>
+              <input type="number" id="edit-x" class="input mono" required />
             </div>
-
-            <div class="computed-telemetry-strip" id="dossier-computed-strip"></div>
-
-            <div class="form-row-2">
-              <div class="form-field">
-                <label class="field-label" for="edit-biome">BIOME ID</label>
-                <input type="text" id="edit-biome" class="input-flat input-mono" />
-              </div>
-              <div class="form-field">
-                <label class="field-label" for="edit-region">REGION / CHUNK</label>
-                <input type="text" id="edit-region" class="input-flat input-mono" />
-              </div>
+            <div class="field">
+              <label for="edit-y">Y</label>
+              <input type="number" id="edit-y" class="input mono" required />
+            </div>
+            <div class="field">
+              <label for="edit-z">Z</label>
+              <input type="number" id="edit-z" class="input mono" required />
             </div>
           </div>
 
-          <div class="dossier-section">
-            <div class="section-kicker">RECONNAISSANCE INTEL</div>
-            <div class="form-field">
-              <label class="field-label" for="edit-players">SPOTTED PLAYERS (COMMA SEPARATED)</label>
-              <input type="text" id="edit-players" class="input-flat" placeholder="e.g. artap2, Ollkaka2013" />
-            </div>
-
-            <div class="form-field">
-              <label class="field-label" for="edit-containers">CONTAINERS &amp; INFRASTRUCTURE</label>
-              <input type="text" id="edit-containers" class="input-flat" placeholder="e.g. 15+ double chests, 2 purple shulkers, spawner" />
-            </div>
-
-            <div class="form-field">
-              <label class="field-label" for="edit-notes">FIELD NOTES &amp; BREACH PLAN</label>
-              <textarea id="edit-notes" class="textarea-flat" rows="4"></textarea>
-            </div>
+          <div class="nether-readout" id="dossier-nether-readout">
+            Nether Roof (÷8): -615, 128, -155
           </div>
 
-          <div class="dossier-section">
-            <div class="section-kicker">XAERO CHAT SHARE STRING</div>
-            <input type="text" id="dossier-xaero-preview" class="input-flat input-mono" readonly />
+          <div class="field">
+            <label for="edit-containers">Loot Summary (1 line)</label>
+            <input type="text" id="edit-containers" class="input" placeholder="e.g. 15 chests, 2 shulkers, spawner" />
           </div>
 
-          <div class="dossier-form-actions">
-            <button type="button" class="btn-danger" id="btn-delete-base">DELETE RECORD</button>
-            <div class="dossier-save-group">
-              <span class="save-indicator" id="dossier-save-msg"></span>
-              <button type="submit" class="btn-primary">SAVE DOSSIER CHANGES</button>
-            </div>
+          <div class="field">
+            <label for="edit-notes">Notes</label>
+            <textarea id="edit-notes" class="textarea" rows="4" placeholder="Details, online players, access route..."></textarea>
+          </div>
+
+          <div class="form-footer">
+            <button type="button" class="btn-danger" id="btn-delete-base">Delete</button>
+            <button type="submit" class="btn-primary">Save Changes</button>
           </div>
         </form>
       </div>
     </div>
   </div>
 
-  <!-- NEW TARGET / F3 SCREENSHOT OCR INGESTION MODAL -->
-  <div id="ingest-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="ingest-title">
-    <div class="ingest-sheet">
-      <header class="dossier-topbar">
-        <div class="dossier-id-group">
-          <span class="dossier-plate-num">INGESTION // NEW TARGET</span>
-          <h2 class="dossier-title" id="ingest-title">Catalog Reconnaissance Target</h2>
-        </div>
-        <button type="button" class="btn-Action btn-close" id="ingest-close">CLOSE [ESC]</button>
+  <!-- ADD BASE MODAL -->
+  <div id="ingest-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true">
+    <div class="modal-sheet modal-sheet-narrow">
+      <header class="modal-header">
+        <h2 class="modal-title">Add Base</h2>
+        <button type="button" class="btn-ghost" id="ingest-close">Close</button>
       </header>
 
-      <div class="ingest-body">
-        <div class="ingest-drop-col">
-          <label for="ingest-file-input" class="ingest-drop-box" id="ingest-drop-box">
-            <input type="file" id="ingest-file-input" accept="image/png,image/jpeg,image/webp" hidden />
-            <div id="ingest-preview-empty" class="ingest-empty-state">
-              <div class="section-kicker">STEP 01 // OPTIONAL SCREENSHOT PLATE</div>
-              <div class="ingest-drop-headline">Click or Drop F3 Screenshot (.png)</div>
-              <div class="ingest-drop-sub">
-                Optical parser reads BetterF3 / Vanilla F3 debug screen to auto-populate Block X, Y, Z, Dimension, and Biome. Or enter coordinates manually on the right.
-              </div>
-            </div>
-            <img id="ingest-preview-img" src="" alt="Uploaded preview" hidden />
-          </label>
-          <div class="ocr-status-bar" id="ocr-status-bar">
-            <span id="ocr-status-text">AWAITING IMAGE OR MANUAL ENTRY</span>
-            <button type="button" class="btn-Action" id="btn-run-ocr" hidden>RE-SCAN F3 TEXT</button>
+      <form id="ingest-form" class="ingest-form">
+        <label for="ingest-file-input" class="upload-box" id="ingest-drop-box">
+          <input type="file" id="ingest-file-input" accept="image/png,image/jpeg,image/webp" hidden />
+          <div id="ingest-preview-empty">
+            <div class="upload-title">Drop F3 screenshot or click to upload</div>
+            <div class="upload-sub" id="ocr-status-text">Optional — auto-fills name and coordinates</div>
+          </div>
+          <img id="ingest-preview-img" src="" alt="Preview" hidden />
+        </label>
+
+        <div class="field-row-2">
+          <div class="field">
+            <label for="new-name">Name *</label>
+            <input type="text" id="new-name" class="input" required placeholder="Player or base name" />
+          </div>
+          <div class="field">
+            <label for="new-status">Status</label>
+            <select id="new-status" class="select">
+              <option value="priority">Priority (To Raid)</option>
+              <option value="scouted" selected>Scouted</option>
+              <option value="raided">Raided</option>
+            </select>
           </div>
         </div>
 
-        <form id="ingest-form" class="ingest-form-col">
-          <div class="form-row-2">
-            <div class="form-field">
-              <label class="field-label" for="new-name">TARGET / PLAYER NAME *</label>
-              <input type="text" id="new-name" class="input-flat" required placeholder="e.g. player_name" />
-            </div>
-            <div class="form-field">
-              <label class="field-label" for="new-status">INITIAL STATUS</label>
-              <select id="new-status" class="select-flat">
-                <option value="priority">PRIORITY TARGET</option>
-                <option value="scouted" selected>SCOUTED / VERIFIED</option>
-                <option value="compromised">COMPROMISED</option>
-                <option value="raided">RAIDED</option>
-              </select>
-            </div>
+        <div class="field-row-3">
+          <div class="field">
+            <label for="new-x">X *</label>
+            <input type="number" id="new-x" class="input mono" required placeholder="-4920" />
           </div>
+          <div class="field">
+            <label for="new-y">Y *</label>
+            <input type="number" id="new-y" class="input mono" required value="-54" />
+          </div>
+          <div class="field">
+            <label for="new-z">Z *</label>
+            <input type="number" id="new-z" class="input mono" required placeholder="-1237" />
+          </div>
+        </div>
 
-          <div class="form-row-3">
-            <div class="form-field">
-              <label class="field-label" for="new-x">BLOCK X *</label>
-              <input type="number" id="new-x" class="input-flat input-mono" required placeholder="-4920" />
-            </div>
-            <div class="form-field">
-              <label class="field-label" for="new-y">BLOCK Y *</label>
-              <input type="number" id="new-y" class="input-flat input-mono" required placeholder="-54" value="-54" />
-            </div>
-            <div class="form-field">
-              <label class="field-label" for="new-z">BLOCK Z *</label>
-              <input type="number" id="new-z" class="input-flat input-mono" required placeholder="-1237" />
-            </div>
+        <div class="field-row-2">
+          <div class="field">
+            <label for="new-dimension">Dimension</label>
+            <select id="new-dimension" class="select">
+              <option value="overworld">Overworld</option>
+              <option value="the_end">The End</option>
+              <option value="the_nether">Nether</option>
+            </select>
           </div>
+          <div class="field">
+            <label for="new-containers">Loot Summary</label>
+            <input type="text" id="new-containers" class="input" placeholder="e.g. Shulkers, villager hall" />
+          </div>
+        </div>
 
-          <div class="form-row-3">
-            <div class="form-field">
-              <label class="field-label" for="new-dimension">DIMENSION</label>
-              <select id="new-dimension" class="select-flat">
-                <option value="overworld">minecraft:overworld</option>
-                <option value="the_end">minecraft:the_end</option>
-                <option value="the_nether">minecraft:the_nether</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label class="field-label" for="new-tier">LOOT TIER</label>
-              <select id="new-tier" class="select-flat">
-                <option value="high">HIGH (STACKED)</option>
-                <option value="medium" selected>MEDIUM</option>
-                <option value="low">LOW</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label class="field-label" for="new-biome">BIOME</label>
-              <input type="text" id="new-biome" class="input-flat input-mono" placeholder="plains" />
-            </div>
-          </div>
+        <div class="field">
+          <label for="new-notes">Notes</label>
+          <textarea id="new-notes" class="textarea" rows="2" placeholder="Optional notes..."></textarea>
+        </div>
 
-          <div class="form-field">
-            <label class="field-label" for="new-players">SPOTTED PLAYERS</label>
-            <input type="text" id="new-players" class="input-flat" placeholder="Comma-separated usernames" />
-          </div>
-
-          <div class="form-field">
-            <label class="field-label" for="new-containers">VISIBLE CONTAINERS / DEFENSES</label>
-            <input type="text" id="new-containers" class="input-flat" placeholder="e.g. 6 double chests, 1 shulker, villager hall" />
-          </div>
-
-          <div class="form-field">
-            <label class="field-label" for="new-notes">RECONNAISSANCE NOTES</label>
-            <textarea id="new-notes" class="textarea-flat" rows="3" placeholder="Access route, traps, online schedule..."></textarea>
-          </div>
-
-          <div class="dossier-form-actions">
-            <button type="button" class="btn-secondary" id="ingest-cancel">CANCEL</button>
-            <button type="submit" class="btn-primary">COMMIT TARGET TO LEDGER</button>
-          </div>
-        </form>
-      </div>
+        <div class="form-footer">
+          <button type="button" class="btn-ghost" id="ingest-cancel">Cancel</button>
+          <button type="submit" class="btn-primary">Add Base</button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <!-- Subtle Technical Toast Notification -->
+  <!-- Toast -->
   <div id="toast-bar" class="toast-bar" hidden></div>
 
   <script src="./app.js"></script>
