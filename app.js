@@ -81,6 +81,7 @@
       isDragging: false,
       dragStartX: 0,
       dragStartZ: 0,
+      dragDistance: 0,
       hoveredId: null,
       showRegions: true,
       showLabels: true,
@@ -92,8 +93,94 @@
       activeIndex: 0,
       items: []
     },
-    pendingUploadFilename: ''
+    pendingUploadFilename: '',
+    lastFocusedElement: null
   };
+
+  const PREFS_KEY = 'recon_ledger_prefs_v1';
+
+  function loadPersistedPrefs() {
+    try {
+      const raw = localStorage.getItem(PREFS_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (['grid', 'table', 'map'].includes(saved.activeView)) state.activeView = saved.activeView;
+      if (['overworld', 'nether'].includes(saved.globalCoordMode)) state.globalCoordMode = saved.globalCoordMode;
+      if (['subject', 'raw'].includes(saved.cropMode)) state.cropMode = saved.cropMode;
+      if (typeof saved.showCardVectors === 'boolean') state.showCardVectors = saved.showCardVectors;
+      if (typeof saved.sortBy === 'string') state.sortBy = saved.sortBy;
+      if (saved.sortDir === 1 || saved.sortDir === -1) state.sortDir = saved.sortDir;
+      if (saved.origin && typeof saved.origin.x === 'number' && typeof saved.origin.z === 'number') {
+        state.origin = {
+          x: saved.origin.x,
+          z: saved.origin.z,
+          label: saved.origin.label || 'Spawn (0, 0)'
+        };
+      }
+      if (Array.isArray(saved.routeIds)) {
+        state.routeIds = saved.routeIds.filter(id => typeof id === 'string');
+      }
+      if (saved.tableColumns && typeof saved.tableColumns === 'object') {
+        state.tableColumns = { ...state.tableColumns, ...saved.tableColumns };
+      }
+      if (typeof saved.tableShowPreview === 'boolean') state.tableShowPreview = saved.tableShowPreview;
+      if (typeof saved.tableCompact === 'boolean') state.tableCompact = saved.tableCompact;
+    } catch {}
+  }
+
+  function savePersistedPrefs() {
+    try {
+      localStorage.setItem(
+        PREFS_KEY,
+        JSON.stringify({
+          activeView: state.activeView,
+          globalCoordMode: state.globalCoordMode,
+          cropMode: state.cropMode,
+          showCardVectors: state.showCardVectors,
+          sortBy: state.sortBy,
+          sortDir: state.sortDir,
+          origin: state.origin,
+          routeIds: state.routeIds,
+          tableColumns: state.tableColumns,
+          tableShowPreview: state.tableShowPreview,
+          tableCompact: state.tableCompact
+        })
+      );
+    } catch {}
+  }
+
+  function syncControlsFromState() {
+    document.querySelectorAll('.view-segmented .seg-item').forEach(btn => {
+      btn.classList.toggle('is-active', btn.dataset.view === state.activeView);
+    });
+    document.getElementById('view-grid').hidden = state.activeView !== 'grid';
+    document.getElementById('view-table').hidden = state.activeView !== 'table';
+    document.getElementById('view-map').hidden = state.activeView !== 'map';
+
+    document.querySelectorAll('#global-coord-mode .seg-item').forEach(btn => {
+      btn.classList.toggle('is-active', btn.dataset.coordMode === state.globalCoordMode);
+    });
+    document.querySelectorAll('#toggle-crop-mode .seg-item').forEach(btn => {
+      btn.classList.toggle('is-active', btn.dataset.crop === state.cropMode);
+    });
+
+    const sortSel = document.getElementById('sort-select');
+    if (sortSel) sortSel.value = state.sortBy;
+    const sortDirBtn = document.getElementById('btn-sort-dir');
+    if (sortDirBtn) sortDirBtn.textContent = state.sortDir === 1 ? '↑ ASC' : '↓ DESC';
+
+    const vecCb = document.getElementById('toggle-card-vectors');
+    if (vecCb) vecCb.checked = state.showCardVectors;
+    const prevCb = document.getElementById('toggle-table-preview');
+    if (prevCb) prevCb.checked = state.tableShowPreview;
+    const compCb = document.getElementById('toggle-table-compact');
+    if (compCb) compCb.checked = state.tableCompact;
+
+    document.querySelectorAll('#table-col-toggles input[data-col]').forEach(cb => {
+      const col = cb.dataset.col;
+      if (col in state.tableColumns) cb.checked = Boolean(state.tableColumns[col]);
+    });
+  }
 
   // ============================================================================
   // TELEMETRY, NETHER CONVERSION & F3 YAW MATH
@@ -197,10 +284,10 @@
     const cleanSet = sanitizeXaeroToken(setName || 'gui.xaero_default');
 
     let dimFolder = 'Internal-overworld-waypoints';
-    if (coordMode === 'nether_roof' || base.dimension === 'the_nether') {
-      dimFolder = 'Internal-the_nether-waypoints';
-    } else if (base.dimension === 'the_end') {
+    if (base.dimension === 'the_end') {
       dimFolder = 'Internal-the_end-waypoints';
+    } else if (coordMode === 'nether_roof' || base.dimension === 'the_nether') {
+      dimFolder = 'Internal-the_nether-waypoints';
     }
 
     return {
@@ -225,19 +312,57 @@
   }
 
   // ============================================================================
-  // TOAST & INLINE MICRO-FEEDBACK
+  // TOAST, UNDO & TWO-STEP CONFIRMATION
   // ============================================================================
 
   let toastTimer = null;
-  function showToast(msg) {
+  function showToast(msg, options = {}) {
     const bar = document.getElementById('toast-bar');
     if (!bar) return;
-    bar.textContent = msg;
+    const { undoLabel = 'Undo', onUndo = null, duration = onUndo ? 5500 : 2400 } = options;
+    bar.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = msg;
+    bar.appendChild(span);
+
+    if (typeof onUndo === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-undo-btn';
+      btn.textContent = undoLabel;
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        bar.hidden = true;
+        clearTimeout(toastTimer);
+        await onUndo();
+      });
+      bar.appendChild(btn);
+    }
+
     bar.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       bar.hidden = true;
-    }, 2300);
+    }, duration);
+  }
+
+  function armConfirmButton(btn, confirmText = 'Confirm Delete?') {
+    if (!btn) return false;
+    if (btn.classList.contains('is-confirming')) {
+      btn.classList.remove('is-confirming');
+      if (btn.dataset.origLabel) btn.textContent = btn.dataset.origLabel;
+      clearTimeout(btn._confirmTimer);
+      return true;
+    }
+    btn.dataset.origLabel = btn.textContent;
+    btn.textContent = confirmText;
+    btn.classList.add('is-confirming');
+    clearTimeout(btn._confirmTimer);
+    btn._confirmTimer = setTimeout(() => {
+      btn.classList.remove('is-confirming');
+      if (btn.dataset.origLabel) btn.textContent = btn.dataset.origLabel;
+    }, 3200);
+    return false;
   }
 
   function flashInlineCopied(el, tempText = '✓ Copied') {
@@ -327,6 +452,8 @@
       state.bases = (await fallbackRes.json()) || [];
       state.untracked = [];
     }
+    const validIds = new Set(state.bases.map(b => b.id));
+    state.routeIds = state.routeIds.filter(id => validIds.has(id));
     if (!state.focusedBaseId && state.bases.length > 0) {
       state.focusedBaseId = state.bases[0].id;
     }
@@ -392,6 +519,28 @@
     }
   }
 
+  async function restoreBases(deletedBases) {
+    if (!deletedBases || deletedBases.length === 0) return;
+    try {
+      const res = await fetch(`${state.apiBase}/api/bases/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore', items: deletedBases })
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      state.bases = data.bases;
+    } catch {
+      const existingIds = new Set(state.bases.map(b => b.id));
+      deletedBases.forEach(b => {
+        if (b && b.id && !existingIds.has(b.id)) state.bases.push(b);
+      });
+    }
+    populateOriginSelect();
+    renderAll();
+    showToast(`Restored ${deletedBases.length} base(s)`);
+  }
+
   async function createBase(payload) {
     try {
       const res = await fetch(`${state.apiBase}/api/bases`, {
@@ -415,6 +564,7 @@
   }
 
   async function deleteBase(id) {
+    const snapshot = state.bases.find(b => b.id === id);
     try {
       const res = await fetch(`${state.apiBase}/api/bases/${encodeURIComponent(id)}`, {
         method: 'DELETE'
@@ -426,10 +576,12 @@
         state.routeIds = state.routeIds.filter(rid => rid !== id);
         populateOriginSelect();
         renderAll();
+        return snapshot ? [snapshot] : [];
       }
     } catch {
       showToast('Failed to delete base');
     }
+    return [];
   }
 
   // ============================================================================
@@ -834,12 +986,19 @@
               ${escapeHtml(base.plate || '—')}
             </td>
 
-            <td data-inline-edit="${escapeHtml(base.id)}" data-edit-field="name" title="Click to open Dossier · Double-click to rename inline">
-              <div style="display:flex;align-items:center;gap:7px;">
-                <button type="button" class="row-title-btn" data-open-dossier="${escapeHtml(base.id)}">
+            <td data-name-cell="${escapeHtml(base.id)}">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button type="button" class="row-title-btn" data-open-dossier="${escapeHtml(base.id)}" title="Inspect Dossier &amp; F3 Loupe">
                   <span class="status-dot dot-${st}"></span>
                   <span>${escapeHtml(base.name)}</span>
                 </button>
+                <button
+                  type="button"
+                  class="btn-inline-rename"
+                  data-inline-rename="${escapeHtml(base.id)}"
+                  aria-label="Rename ${escapeHtml(base.name)} inline"
+                  title="Rename inline (F2)"
+                >✎</button>
                 ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
                 ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
                 ${routeIdx !== -1 ? `<span class="route-step-pill">#0${routeIdx + 1}</span>` : ''}
@@ -1093,34 +1252,52 @@
     ctx.strokeRect(wbL, wbT, wbR - wbL, wbB - wbT);
     ctx.setLineDash([]);
 
-    // 5. Active Raid Route Vector Path
+    // 5. Active Raid Route Vector Path with Directional Arrowheads
     if (state.routeIds.length > 0) {
-      ctx.strokeStyle = '#e86a47';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
       let prevSX = toScreenX(state.origin.x);
       let prevSY = toScreenY(state.origin.z);
-      ctx.moveTo(prevSX, prevSY);
 
       state.routeIds.forEach((id, idx) => {
         const b = state.bases.find(item => item.id === id);
-        if (!b) return;
+        if (!b || b.dimension === 'the_end') return;
         const sx = toScreenX(b.x);
         const sy = toScreenY(b.z);
+
+        ctx.strokeStyle = '#e86a47';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(prevSX, prevSY);
         ctx.lineTo(sx, sy);
+        ctx.stroke();
 
         const midX = (prevSX + sx) / 2;
         const midY = (prevSY + sy) / 2;
+        const angle = Math.atan2(sy - prevSY, sx - prevSX);
+        const legLen = Math.hypot(sx - prevSX, sy - prevSY);
+
+        if (legLen > 24) {
+          ctx.save();
+          ctx.translate(midX, midY);
+          ctx.rotate(angle);
+          ctx.fillStyle = '#e86a47';
+          ctx.beginPath();
+          ctx.moveTo(5, 0);
+          ctx.lineTo(-4, -3.5);
+          ctx.lineTo(-4, 3.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
         ctx.save();
         ctx.fillStyle = '#e86a47';
         ctx.font = '600 10px "IBM Plex Mono", monospace';
-        ctx.fillText(`L0${idx + 1}`, midX + 5, midY - 4);
+        ctx.fillText(`L0${idx + 1}`, midX + 7, midY - 5);
         ctx.restore();
 
         prevSX = sx;
         prevSY = sy;
       });
-      ctx.stroke();
     }
 
     // 6. Active Vector Origin Crosshair
@@ -1176,6 +1353,37 @@
     });
 
     ctx.restore();
+  }
+
+  function fitMapToActive() {
+    const routeBases = state.routeIds
+      .map(id => state.bases.find(b => b.id === id))
+      .filter(b => b && b.dimension !== 'the_end');
+    const pool =
+      routeBases.length > 0
+        ? routeBases
+        : getFilteredBases().filter(b => b.dimension !== 'the_end' && normalizeStatus(b.status) !== 'raided');
+
+    if (pool.length === 0) return;
+
+    const xs = pool.map(b => b.x);
+    const zs = pool.map(b => b.z);
+    if (routeBases.length > 0) {
+      xs.push(state.origin.x);
+      zs.push(state.origin.z);
+    }
+
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minZ = Math.min(...zs);
+    const maxZ = Math.max(...zs);
+
+    state.radar.centerX = (minX + maxX) / 2;
+    state.radar.centerZ = (minZ + maxZ) / 2;
+    const span = Math.max(2200, Math.max(maxX - minX, maxZ - minZ) * 1.38);
+    state.radar.zoom = Math.max(0.65, Math.min(10, 26800 / span));
+    drawMapCanvas();
+    showToast(routeBases.length > 0 ? 'Fitted map to active Raid Route' : 'Fitted map to active bases');
   }
 
   function renderMapSidebar() {
@@ -1237,6 +1445,22 @@
         .map((id, idx) => {
           const b = state.bases.find(item => item.id === id);
           if (!b) return '';
+          if (b.dimension === 'the_end') {
+            return `
+              <div class="route-leg-card">
+                <div class="route-leg-top">
+                  <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text-primary);">
+                    #0${idx + 1} · ${escapeHtml(b.name)}
+                  </span>
+                  <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">×</button>
+                </div>
+                <div class="route-leg-meta">
+                  <span>End Gateway</span>
+                  <span>The End (${b.x}, ${b.z})</span>
+                </div>
+              </div>
+            `;
+          }
           const legOw = Math.round(Math.hypot(b.x - prevX, b.z - prevZ));
           const legN = Math.round(legOw / 8);
           const bearing = getBearing(prevX, prevZ, b.x, b.z);
@@ -1275,13 +1499,16 @@
     let prevZ = state.origin.z;
 
     const itemsHtml = stops.map((base, idx) => {
-      const legOw = Math.round(Math.hypot(base.x - prevX, base.z - prevZ));
-      const legNether = Math.round(legOw / 8);
-      const bearing = getBearing(prevX, prevZ, base.x, base.z);
+      const isEnd = base.dimension === 'the_end';
+      const legOw = isEnd ? 0 : Math.round(Math.hypot(base.x - prevX, base.z - prevZ));
+      const legNether = isEnd ? 0 : Math.round(legOw / 8);
+      const bearing = isEnd ? { cardinal: 'END', yawStr: 'Gateway' } : getBearing(prevX, prevZ, base.x, base.z);
       totalOw += legOw;
       totalNether += legNether;
-      prevX = base.x;
-      prevZ = base.z;
+      if (!isEnd) {
+        prevX = base.x;
+        prevZ = base.z;
+      }
       const nc = getNetherCoords(base);
 
       return `
@@ -1307,8 +1534,8 @@
             }
           </div>
           <div class="route-leg-meta" style="color:var(--text-muted);">
-            <span>Leg Δ: ${formatNumber(legOw)}m OW (${formatNumber(legNether)}m N)</span>
-            <span>F3 Yaw: ${bearing.cardinal} ${bearing.yawStr}</span>
+            <span>${isEnd ? 'End Gateway (Stronghold Portal)' : `Leg Δ: ${formatNumber(legOw)}m OW (${formatNumber(legNether)}m N)`}</span>
+            <span>${isEnd ? 'Dimension: End' : `F3 Yaw: ${bearing.cardinal} ${bearing.yawStr}`}</span>
           </div>
         </div>
       `;
@@ -1333,7 +1560,9 @@
   function optimizeRouteNearestNeighbor() {
     const stops = state.routeIds.map(id => state.bases.find(b => b.id === id)).filter(Boolean);
     if (stops.length < 2) return;
-    const remaining = [...stops];
+    const owStops = stops.filter(b => b.dimension !== 'the_end');
+    const endStops = stops.filter(b => b.dimension === 'the_end');
+    const remaining = [...owStops];
     const ordered = [];
     let currX = state.origin.x;
     let currZ = state.origin.z;
@@ -1354,6 +1583,7 @@
       currZ = next.z;
     }
 
+    endStops.forEach(b => ordered.push(b.id));
     state.routeIds = ordered;
     renderAll();
     showToast('Optimized route order (Nearest-Neighbor from Origin)');
@@ -1427,41 +1657,68 @@
     if (!raw) return;
 
     const lines = raw.split(/\r?\n/);
-    let importedCount = 0;
+    const batchItems = [];
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
       const parts = trimmed.split(':');
       if (parts.length >= 6 && (parts[0] === 'waypoint' || parts[0] === 'xaero-waypoint')) {
-        const name = parts[1] || 'Imported Base';
+        const name = (parts[1] || 'Imported Base').replace(/^\d+_/, '').replace(/\s*\[N-ROOF\]$/i, '').trim() || 'Imported Base';
         const x = parseInt(parts[3], 10);
         const y = parseInt(parts[4], 10);
         const z = parseInt(parts[5], 10);
         const color = parseInt(parts[6] || '12', 10);
+        const disabled = String(parts[7] || 'false').toLowerCase() === 'true';
+        const dimHint = String(parts[9] || '').toLowerCase();
+
+        let dimension = 'overworld';
+        if (dimHint.includes('the_end')) dimension = 'the_end';
+        else if (dimHint.includes('the_nether') && !/\[n-roof\]/i.test(parts[1] || '')) dimension = 'the_nether';
+
+        const status = disabled ? 'raided' : color === 12 || color === 4 ? 'priority' : color === 6 ? 'compromised' : 'scouted';
+
         if (!Number.isNaN(x) && !Number.isNaN(z)) {
-          await createBase({
+          batchItems.push({
             name,
             x,
             y: Number.isNaN(y) ? 64 : y,
             z,
+            dimension,
             xaeroColor: Number.isNaN(color) ? 12 : color,
-            status: 'scouted',
+            status,
             tier: 'medium',
             notes: 'Imported via Xaero waypoint string.'
           });
-          importedCount++;
         }
       }
     }
 
-    if (importedCount > 0) {
-      document.getElementById('xaero-import-textarea').value = '';
-      renderXaeroStudio();
-      showToast(`Imported ${importedCount} waypoint(s)`);
-    } else {
+    if (batchItems.length === 0) {
       showToast('No valid Xaero waypoint lines found');
+      return;
     }
+
+    try {
+      const res = await fetch(`${state.apiBase}/api/bases/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import', items: batchItems })
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      state.bases = data.bases;
+      populateOriginSelect();
+      renderAll();
+    } catch {
+      for (const item of batchItems) {
+        await createBase(item);
+      }
+    }
+
+    document.getElementById('xaero-import-textarea').value = '';
+    renderXaeroStudio();
+    showToast(`Imported ${batchItems.length} waypoint(s)`);
   }
 
   // ============================================================================
@@ -1527,8 +1784,17 @@
   function openDossier(baseId) {
     const base = state.bases.find(b => b.id === baseId);
     if (!base) return;
+    if (document.getElementById('dossier-modal').hidden) {
+      state.lastFocusedElement = document.activeElement;
+    }
     state.dossierBaseId = base.id;
     state.focusedBaseId = base.id;
+
+    const delBtn = document.getElementById('btn-delete-base');
+    if (delBtn) {
+      delBtn.classList.remove('is-confirming');
+      delBtn.textContent = 'Delete';
+    }
 
     document.getElementById('dossier-plate').textContent = `PLATE ${base.plate || '01'}`;
     document.getElementById('dossier-title').textContent = base.name;
@@ -1567,6 +1833,7 @@
   function closeDossier() {
     document.getElementById('dossier-modal').hidden = true;
     state.dossierBaseId = null;
+    state.lastFocusedElement?.focus?.();
   }
 
   // ============================================================================
@@ -1694,6 +1961,7 @@
     }
 
     positionFloatingMenu(picker, rect.left, rect.bottom + 4);
+    picker.querySelector('.ctx-item')?.focus();
   }
 
   // ============================================================================
@@ -1757,6 +2025,7 @@
         sub: state.globalCoordMode === 'nether' ? 'Currently: Nether ÷8' : 'Currently: Overworld',
         run: () => {
           state.globalCoordMode = state.globalCoordMode === 'nether' ? 'overworld' : 'nether';
+          syncControlsFromState();
           renderAll();
           showToast(`Display Mode → ${state.globalCoordMode === 'nether' ? 'Nether Roof (÷8)' : 'Overworld'}`);
         }
@@ -1863,9 +2132,11 @@
       `);
     });
     listEl.innerHTML = html.join('');
+    listEl.querySelector('.cmd-item.is-active')?.scrollIntoView({ block: 'nearest' });
   }
 
   function openCommandModal() {
+    state.lastFocusedElement = document.activeElement;
     state.cmd.isOpen = true;
     state.cmd.query = '';
     state.cmd.activeIndex = 0;
@@ -1880,6 +2151,7 @@
   function closeCommandModal() {
     state.cmd.isOpen = false;
     document.getElementById('cmd-modal').hidden = true;
+    state.lastFocusedElement?.focus?.();
   }
 
   // ============================================================================
@@ -1934,6 +2206,7 @@
   }
 
   function openIngestModal(prefillFile = null) {
+    state.lastFocusedElement = document.activeElement;
     document.getElementById('ingest-form').reset();
     state.pendingUploadFilename = '';
     document.getElementById('ingest-preview-img').hidden = true;
@@ -1957,6 +2230,7 @@
 
   function closeIngestModal() {
     document.getElementById('ingest-modal').hidden = true;
+    state.lastFocusedElement?.focus?.();
   }
 
   async function handleFileDropOrSelect(file) {
@@ -2080,6 +2354,7 @@
   }
 
   function renderAll() {
+    savePersistedPrefs();
     renderHeaderAndCounts();
     renderRouteDrawer();
     const filtered = getFilteredBases();
@@ -2099,7 +2374,7 @@
   // ============================================================================
 
   function startInlineEdit(td, baseId, field) {
-    if (td.querySelector('.inline-edit-input')) return;
+    if (!td || td.querySelector('.inline-edit-input')) return;
     const base = state.bases.find(b => b.id === baseId);
     if (!base) return;
 
@@ -2109,7 +2384,6 @@
     input.className = 'inline-edit-input';
     input.value = currentVal;
 
-    const originalHtml = td.innerHTML;
     td.innerHTML = '';
     td.appendChild(input);
     input.focus();
@@ -2120,21 +2394,23 @@
       if (committed) return;
       committed = true;
       const nextVal = input.value.trim();
-      if (nextVal !== currentVal) {
+      if (nextVal && nextVal !== currentVal) {
         await updateBase(baseId, { [field]: nextVal });
-        showToast(`Updated ${base.name}`);
+        showToast(`Updated ${nextVal}`);
       } else {
-        td.innerHTML = originalHtml;
+        renderAll();
       }
     };
 
     input.addEventListener('keydown', e => {
+      e.stopPropagation();
       if (e.key === 'Enter') {
         e.preventDefault();
         commit();
       } else if (e.key === 'Escape') {
+        e.preventDefault();
         committed = true;
-        td.innerHTML = originalHtml;
+        renderAll();
       }
     });
     input.addEventListener('blur', commit);
@@ -2355,7 +2631,7 @@
       startInlineEdit(cell, cell.dataset.inlineEdit, cell.dataset.editField);
     });
 
-    // Table Keyboard Navigation
+    // Table Keyboard Navigation (including F2 for inline rename)
     document.getElementById('bases-table').addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT') return;
       const filtered = getFilteredBases();
@@ -2376,6 +2652,10 @@
         if (state.selectedIds.has(id)) state.selectedIds.delete(id);
         else state.selectedIds.add(id);
         renderAll();
+      } else if (e.key === 'F2' && state.focusedBaseId) {
+        e.preventDefault();
+        const nameCell = document.querySelector(`td[data-name-cell="${CSS.escape(state.focusedBaseId)}"]`);
+        if (nameCell) startInlineEdit(nameCell, state.focusedBaseId, 'name');
       } else if (e.key === 'Enter' && state.focusedBaseId) {
         e.preventDefault();
         openDossier(state.focusedBaseId);
@@ -2425,11 +2705,15 @@
         .map(b => buildXaeroWaypointData(b, { indexPrefix: b.plate, includeTier: true }).chatLine);
       copyText(lines.join('\n'), `Copied ${lines.length} Xaero waypoints`, e.currentTarget);
     });
-    document.getElementById('btn-bulk-delete').addEventListener('click', async () => {
+    document.getElementById('btn-bulk-delete').addEventListener('click', async e => {
       const ids = [...state.selectedIds];
       if (ids.length === 0) return;
+      if (!armConfirmButton(e.currentTarget, `Confirm Delete (${ids.length})?`)) return;
+      const deletedSnapshot = state.bases.filter(b => state.selectedIds.has(b.id));
       await bulkUpdateBases(ids, null, 'delete');
-      showToast(`Deleted ${ids.length} base(s)`);
+      showToast(`Deleted ${ids.length} base(s)`, {
+        onUndo: () => restoreBases(deletedSnapshot)
+      });
     });
 
     // Route Planner Drawer & Controls
@@ -2454,6 +2738,12 @@
     document.getElementById('map-btn-route-priority').addEventListener('click', queuePriorityToRoute);
     document.getElementById('btn-route-optimize').addEventListener('click', optimizeRouteNearestNeighbor);
     document.getElementById('map-btn-route-optimize').addEventListener('click', optimizeRouteNearestNeighbor);
+    document.getElementById('btn-route-reverse')?.addEventListener('click', () => {
+      if (state.routeIds.length < 2) return;
+      state.routeIds.reverse();
+      renderAll();
+      showToast('Reversed Raid Route order');
+    });
     document.getElementById('map-btn-route-open').addEventListener('click', () => {
       routeBackdrop.hidden = false;
     });
@@ -2491,14 +2781,19 @@
     // Xaero Studio Modal
     const xaeroModal = document.getElementById('xaero-modal');
     document.getElementById('btn-open-xaero-modal').addEventListener('click', () => {
+      state.lastFocusedElement = document.activeElement;
       renderXaeroStudio();
       xaeroModal.hidden = false;
     });
     document.getElementById('xaero-modal-close').addEventListener('click', () => {
       xaeroModal.hidden = true;
+      state.lastFocusedElement?.focus?.();
     });
     xaeroModal.addEventListener('click', e => {
-      if (e.target === xaeroModal) xaeroModal.hidden = true;
+      if (e.target === xaeroModal) {
+        xaeroModal.hidden = true;
+        state.lastFocusedElement?.focus?.();
+      }
     });
     ['xaero-scope', 'xaero-coord-mode', 'xaero-set-name', 'xaero-prefix-plate', 'xaero-include-tier', 'xaero-disable-raided'].forEach(
       id => {
@@ -2564,6 +2859,29 @@
           item.run();
         }
       }
+    });
+
+    // Context Menu & Inline Picker Keyboard Navigation (ArrowDown / ArrowUp / Home / End)
+    ['context-menu', 'inline-picker'].forEach(menuId => {
+      document.getElementById(menuId)?.addEventListener('keydown', e => {
+        const menuEl = e.currentTarget;
+        const items = [...menuEl.querySelectorAll('.ctx-item')];
+        if (items.length === 0) return;
+        const idx = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          items[(idx + 1) % items.length].focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          items[(idx - 1 + items.length) % items.length].focus();
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          items[0].focus();
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          items[items.length - 1].focus();
+        }
+      });
     });
 
     // Global Right-Click Context Menu on Cards & Rows
@@ -2649,6 +2967,16 @@
         return;
       }
 
+      // Inline Rename Trigger Button (✎ in Table View)
+      const inlineRenameBtn = e.target.closest('[data-inline-rename]');
+      if (inlineRenameBtn) {
+        e.stopPropagation();
+        const id = inlineRenameBtn.dataset.inlineRename;
+        const td = inlineRenameBtn.closest('td');
+        if (td) startInlineEdit(td, id, 'name');
+        return;
+      }
+
       // Open Context Menu via ⋯ button
       const ctxBtn = e.target.closest('[data-open-ctx]');
       if (ctxBtn) {
@@ -2711,9 +3039,22 @@
         const id = ctxAction.dataset.id;
         const act = ctxAction.dataset.ctxAction;
         const base = state.bases.find(b => b.id === id);
-        closeContextMenus();
-        if (!base) return;
+        if (!base) {
+          closeContextMenus();
+          return;
+        }
 
+        if (act === 'delete') {
+          if (!armConfirmButton(ctxAction, 'Confirm Delete Base?')) return;
+          closeContextMenus();
+          const deleted = await deleteBase(id);
+          showToast(`Deleted ${base.name}`, {
+            onUndo: () => restoreBases(deleted)
+          });
+          return;
+        }
+
+        closeContextMenus();
         if (act === 'dossier') openDossier(id);
         else if (act === 'xaero-ow') {
           copyText(buildXaeroWaypointData(base, { coordMode: 'exact' }).chatLine, `Copied Xaero waypoint (${base.name})`);
@@ -2741,9 +3082,6 @@
           document.getElementById('calc-ow-z').value = base.z;
           updateCalculatorFromOverworld();
           togglePopover('popover-nether', 'btn-toggle-nether-pop');
-        } else if (act === 'delete') {
-          await deleteBase(id);
-          showToast(`Deleted ${base.name}`);
         }
         return;
       }
@@ -2814,7 +3152,7 @@
       }
     });
 
-    // Map Canvas Events
+    // Map Canvas Events (Zoom-to-Cursor & Drag-Click Guard)
     const canvas = document.getElementById('radar-canvas');
     if (canvas) {
       const getTransform = () => {
@@ -2830,8 +3168,11 @@
         const my = e.clientY - rect.top;
 
         if (state.radar.isDragging) {
-          state.radar.centerX -= (mx - state.radar.dragStartX) / pxPerBlock;
-          state.radar.centerZ -= (my - state.radar.dragStartZ) / pxPerBlock;
+          const dx = mx - state.radar.dragStartX;
+          const dy = my - state.radar.dragStartZ;
+          state.radar.dragDistance += Math.hypot(dx, dy);
+          state.radar.centerX -= dx / pxPerBlock;
+          state.radar.centerZ -= dy / pxPerBlock;
           state.radar.dragStartX = mx;
           state.radar.dragStartZ = my;
           drawMapCanvas();
@@ -2862,6 +3203,7 @@
       canvas.addEventListener('mousedown', e => {
         const { rect } = getTransform();
         state.radar.isDragging = true;
+        state.radar.dragDistance = 0;
         state.radar.dragStartX = e.clientX - rect.left;
         state.radar.dragStartZ = e.clientY - rect.top;
       });
@@ -2871,6 +3213,7 @@
       });
 
       canvas.addEventListener('click', e => {
+        if (state.radar.dragDistance > 4) return;
         if (!state.radar.hoveredId) return;
         const id = state.radar.hoveredId;
         if (e.shiftKey) {
@@ -2889,8 +3232,19 @@
         'wheel',
         e => {
           e.preventDefault();
-          const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
-          state.radar.zoom = Math.max(0.6, Math.min(12, state.radar.zoom * factor));
+          const { rect, pxPerBlock: oldScale } = getTransform();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          const wxBefore = state.radar.centerX + (mx - rect.width / 2) / oldScale;
+          const wzBefore = state.radar.centerZ + (my - rect.height / 2) / oldScale;
+
+          const factor = e.deltaY < 0 ? 1.22 : 1 / 1.22;
+          state.radar.zoom = Math.max(0.6, Math.min(14, state.radar.zoom * factor));
+
+          const newWorldSpan = 26800 / state.radar.zoom;
+          const newScale = Math.min(rect.width, rect.height) / newWorldSpan;
+          state.radar.centerX = wxBefore - (mx - rect.width / 2) / newScale;
+          state.radar.centerZ = wzBefore - (my - rect.height / 2) / newScale;
           drawMapCanvas();
         },
         { passive: false }
@@ -2909,6 +3263,7 @@
       state.radar.netherScale = e.target.checked;
       drawMapCanvas();
     });
+    document.getElementById('radar-fit-active')?.addEventListener('click', fitMapToActive);
     document.getElementById('radar-reset-view').addEventListener('click', () => {
       state.radar.centerX = 0;
       state.radar.centerZ = 0;
@@ -3021,11 +3376,15 @@
       }
     });
 
-    document.getElementById('btn-delete-base').addEventListener('click', async () => {
+    document.getElementById('btn-delete-base').addEventListener('click', async e => {
       if (!state.dossierBaseId) return;
-      await deleteBase(state.dossierBaseId);
+      if (!armConfirmButton(e.currentTarget, 'Confirm Delete?')) return;
+      const base = state.bases.find(b => b.id === state.dossierBaseId);
+      const deleted = await deleteBase(state.dossierBaseId);
       closeDossier();
-      showToast('Base deleted');
+      showToast(`Deleted ${base?.name || 'base'}`, {
+        onUndo: () => restoreBases(deleted)
+      });
     });
 
     // Add Base Modal & Global Drag-and-Drop
@@ -3107,6 +3466,7 @@
         if (!document.getElementById('dossier-modal').hidden) return closeDossier();
         if (!document.getElementById('xaero-modal').hidden) {
           document.getElementById('xaero-modal').hidden = true;
+          state.lastFocusedElement?.focus?.();
           return;
         }
         if (!document.getElementById('ingest-modal').hidden) return closeIngestModal();
@@ -3157,6 +3517,8 @@
     });
   }
 
+  loadPersistedPrefs();
+  syncControlsFromState();
   bindEvents();
   fetchBases();
 })();

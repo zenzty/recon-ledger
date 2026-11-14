@@ -466,6 +466,7 @@
               <span class="map-coord-readout" id="radar-cursor-readout">X: 0, Z: 0 · Nether: 0, 0</span>
               <span class="hud-sep">|</span>
               <span class="hud-hint">Click node to inspect · Shift+Click node to add/remove Route stop</span>
+              <button type="button" class="btn-link" id="radar-fit-active" title="Center and zoom map to fit visible bases or active route">Fit Active</button>
               <button type="button" class="btn-link" id="radar-reset-view">Reset View</button>
             </div>
           </div>
@@ -550,7 +551,10 @@
           Queue All Priority
         </button>
         <button type="button" class="btn-secondary btn-sm" id="btn-route-optimize" title="Reorder stops using Nearest-Neighbor path from active Vector Origin">
-          Optimize Order (Nearest-Neighbor)
+          Optimize Order
+        </button>
+        <button type="button" class="btn-secondary btn-sm" id="btn-route-reverse" title="Reverse stop order">
+          ⇅ Reverse
         </button>
         <button type="button" class="btn-secondary btn-sm" id="btn-route-clear">
           Clear
