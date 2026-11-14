@@ -93,6 +93,12 @@
       activeIndex: 0,
       items: []
     },
+    floatingMenu: {
+      menuId: null,
+      type: null,
+      baseId: null,
+      triggerEl: null
+    },
     pendingUploadFilename: '',
     lastFocusedElement: null
   };
@@ -762,6 +768,11 @@
     const bar = document.getElementById('bulk-action-bar');
     const count = state.selectedIds.size;
     bar.hidden = count === 0;
+    const delBtn = document.getElementById('btn-bulk-delete');
+    if (delBtn && delBtn.classList.contains('is-confirming')) {
+      delBtn.classList.remove('is-confirming');
+      delBtn.textContent = 'Delete';
+    }
     if (count > 0) {
       document.getElementById('bulk-selected-count').textContent = `${count} selected`;
     }
@@ -777,8 +788,9 @@
 
     if (filtered.length === 0) {
       grid.innerHTML = `
-        <div style="grid-column:1/-1;padding:64px 0;text-align:center;color:var(--text-muted);">
-          No bases match the current filters.
+        <div style="grid-column:1/-1;padding:64px 0;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;gap:12px;">
+          <div>No bases match the current filters.</div>
+          <button type="button" class="btn-secondary btn-sm" data-reset-all-filters>Reset All Filters</button>
         </div>
       `;
       return;
@@ -849,7 +861,7 @@
                   <h2 class="card-title" data-open-dossier="${escapeHtml(base.id)}">${escapeHtml(base.name)}</h2>
                   ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
                   ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
-                  ${tier === 'high' ? `<span class="tier-pill tier-high" title="High Value Loot Tier">HIGH</span>` : ''}
+                  ${tier === 'high' ? `<button type="button" class="tier-pill tier-high" data-tier-picker="${escapeHtml(base.id)}" title="Click to change Loot Tier">HIGH</button>` : ''}
                 </div>
 
                 <div class="card-header-right">
@@ -949,7 +961,7 @@
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="12" style="padding:48px 18px;text-align:center;color:var(--text-muted);">No matching bases found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12" style="padding:48px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><span>No matching bases found.</span><button type="button" class="btn-secondary btn-xs" data-reset-all-filters>Reset All Filters</button></div></td></tr>`;
       return;
     }
 
@@ -1545,6 +1557,17 @@
     document.getElementById('route-dist-ow').textContent = `${formatNumber(totalOw)} m`;
     document.getElementById('route-dist-nether').textContent = `${formatNumber(totalNether)} m`;
 
+    const canReorder = stops.length >= 2;
+    const hasStops = stops.length > 0;
+    ['btn-route-optimize', 'map-btn-route-optimize', 'btn-route-reverse'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.disabled = !canReorder;
+    });
+    ['btn-route-clear', 'btn-route-copy-xaero', 'btn-route-copy-nether'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.disabled = !hasStops;
+    });
+
     if (stops.length === 0) {
       listEl.innerHTML = `
         <div style="padding:36px 16px;text-align:center;color:var(--text-muted);line-height:1.6;">
@@ -1841,8 +1864,15 @@
   // ============================================================================
 
   function closeContextMenus() {
-    document.getElementById('context-menu').hidden = true;
-    document.getElementById('inline-picker').hidden = true;
+    const ctxMenu = document.getElementById('context-menu');
+    const inlinePicker = document.getElementById('inline-picker');
+    if (ctxMenu) ctxMenu.hidden = true;
+    if (inlinePicker) inlinePicker.hidden = true;
+    if (state.floatingMenu.triggerEl) {
+      state.floatingMenu.triggerEl.classList.remove('is-open');
+      state.floatingMenu.triggerEl.setAttribute('aria-expanded', 'false');
+    }
+    state.floatingMenu = { menuId: null, type: null, baseId: null, triggerEl: null };
   }
 
   function positionFloatingMenu(menuEl, clientX, clientY) {
@@ -1854,11 +1884,22 @@
     menuEl.style.top = `${Math.max(8, y)}px`;
   }
 
-  function openContextMenu(baseId, clientX, clientY) {
+  function openContextMenu(baseId, clientX, clientY, triggerEl = null) {
+    const menu = document.getElementById('context-menu');
+    if (
+      triggerEl &&
+      !menu.hidden &&
+      state.floatingMenu.menuId === 'context-menu' &&
+      (state.floatingMenu.triggerEl === triggerEl || state.floatingMenu.baseId === baseId)
+    ) {
+      closeContextMenus();
+      return;
+    }
+
+    closeAllPopovers();
     closeContextMenus();
     const base = state.bases.find(b => b.id === baseId);
     if (!base) return;
-    const menu = document.getElementById('context-menu');
     const nc = getNetherCoords(base);
     const inRoute = state.routeIds.includes(base.id);
 
@@ -1916,15 +1957,31 @@
       </button>
     `;
 
+    state.floatingMenu = { menuId: 'context-menu', type: 'ctx', baseId, triggerEl };
+    if (triggerEl) {
+      triggerEl.classList.add('is-open');
+      triggerEl.setAttribute('aria-expanded', 'true');
+    }
     positionFloatingMenu(menu, clientX, clientY);
-    menu.querySelector('.ctx-item')?.focus();
+    menu.focus({ preventScroll: true });
   }
 
   function openInlinePicker(type, baseId, anchorEl) {
+    const picker = document.getElementById('inline-picker');
+    if (
+      !picker.hidden &&
+      state.floatingMenu.menuId === 'inline-picker' &&
+      (state.floatingMenu.triggerEl === anchorEl ||
+        (state.floatingMenu.type === type && state.floatingMenu.baseId === baseId))
+    ) {
+      closeContextMenus();
+      return;
+    }
+
+    closeAllPopovers();
     closeContextMenus();
     const base = state.bases.find(b => b.id === baseId);
     if (!base) return;
-    const picker = document.getElementById('inline-picker');
     const rect = anchorEl.getBoundingClientRect();
 
     if (type === 'status') {
@@ -1960,8 +2017,11 @@
       `;
     }
 
+    state.floatingMenu = { menuId: 'inline-picker', type, baseId, triggerEl: anchorEl };
+    anchorEl.classList.add('is-open');
+    anchorEl.setAttribute('aria-expanded', 'true');
     positionFloatingMenu(picker, rect.left, rect.bottom + 4);
-    picker.querySelector('.ctx-item')?.focus();
+    picker.focus({ preventScroll: true });
   }
 
   // ============================================================================
@@ -2075,6 +2135,18 @@
           state.filters.routeOnly = false;
           state.selectedIds.clear();
           document.getElementById('search-input').value = '';
+          const clearBtn = document.getElementById('btn-clear-search');
+          if (clearBtn) clearBtn.hidden = true;
+          const kbd = document.getElementById('search-kbd-hint');
+          if (kbd) kbd.hidden = false;
+          document.querySelectorAll('.filter-pill').forEach(b => {
+            const active = b.dataset.status === 'all';
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', String(active));
+          });
+          document.querySelectorAll('#popover-facets input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+          });
           renderAll();
         }
       }
@@ -2323,9 +2395,12 @@
       const p = document.getElementById(id);
       if (p) p.hidden = true;
     });
-    ['btn-toggle-nether-pop', 'btn-toggle-facets', 'btn-toggle-display-pop'].forEach(id => {
+    ['btn-toggle-nether-pop', 'btn-toggle-facets', 'btn-toggle-display-pop', 'active-origin-pill'].forEach(id => {
       const b = document.getElementById(id);
-      if (b) b.setAttribute('aria-expanded', 'false');
+      if (b) {
+        b.setAttribute('aria-expanded', 'false');
+        b.classList.remove('is-open');
+      }
     });
   }
 
@@ -2338,7 +2413,17 @@
     closeContextMenus();
     if (willOpen) {
       pop.hidden = false;
-      if (btn) btn.setAttribute('aria-expanded', 'true');
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'true');
+        btn.classList.add('is-open');
+      }
+      if (popoverId === 'popover-nether') {
+        const originPill = document.getElementById('active-origin-pill');
+        if (originPill) {
+          originPill.setAttribute('aria-expanded', 'true');
+          originPill.classList.add('is-open');
+        }
+      }
     }
   }
 
@@ -2578,18 +2663,28 @@
       renderAll();
     });
 
-    // Search Input
+    // Search Input & Clear Button
     const searchInput = document.getElementById('search-input');
     const kbdHint = document.getElementById('search-kbd-hint');
+    const clearSearchBtn = document.getElementById('btn-clear-search');
+    const syncSearchAffordances = () => {
+      const hasVal = Boolean(searchInput.value.trim());
+      if (clearSearchBtn) clearSearchBtn.hidden = !hasVal;
+      if (kbdHint) kbdHint.hidden = hasVal || document.activeElement === searchInput;
+    };
     searchInput.addEventListener('input', e => {
       state.filters.query = e.target.value;
+      syncSearchAffordances();
       renderAll();
     });
-    searchInput.addEventListener('focus', () => {
-      if (kbdHint) kbdHint.hidden = true;
-    });
-    searchInput.addEventListener('blur', () => {
-      if (kbdHint && !searchInput.value) kbdHint.hidden = false;
+    searchInput.addEventListener('focus', syncSearchAffordances);
+    searchInput.addEventListener('blur', syncSearchAffordances);
+    clearSearchBtn?.addEventListener('click', () => {
+      searchInput.value = '';
+      state.filters.query = '';
+      syncSearchAffordances();
+      renderAll();
+      searchInput.focus();
     });
 
     // Table Header Sorting & Master Checkbox
@@ -2616,6 +2711,14 @@
     // Table Row Hover -> Live Preview Update & Double-Click Inline Edit
     const tbody = document.getElementById('bases-tbody');
     tbody.addEventListener('mouseover', e => {
+      // Do not jump row focus while a floating dropdown/context menu or inline input is open
+      if (
+        !document.getElementById('context-menu').hidden ||
+        !document.getElementById('inline-picker').hidden ||
+        tbody.querySelector('.inline-edit-input')
+      ) {
+        return;
+      }
       const tr = e.target.closest('tr[data-base-id]');
       if (tr && state.focusedBaseId !== tr.dataset.baseId) {
         state.focusedBaseId = tr.dataset.baseId;
@@ -2824,6 +2927,7 @@
 
     // Command Palette Events
     document.getElementById('btn-open-cmd').addEventListener('click', openCommandModal);
+    document.getElementById('cmd-close')?.addEventListener('click', closeCommandModal);
     document.getElementById('cmd-modal').addEventListener('click', e => {
       if (e.target.id === 'cmd-modal') closeCommandModal();
       const itemBtn = e.target.closest('[data-cmd-idx]');
@@ -2831,6 +2935,19 @@
         const item = state.cmd.items[Number(itemBtn.dataset.cmdIdx)];
         closeCommandModal();
         item?.run();
+      }
+    });
+    document.getElementById('cmd-list')?.addEventListener('mousemove', e => {
+      const itemBtn = e.target.closest('[data-cmd-idx]');
+      if (!itemBtn) return;
+      const idx = Number(itemBtn.dataset.cmdIdx);
+      if (!Number.isNaN(idx) && state.cmd.activeIndex !== idx) {
+        state.cmd.activeIndex = idx;
+        document.querySelectorAll('#cmd-list .cmd-item').forEach(btn => {
+          const isActive = Number(btn.dataset.cmdIdx) === idx;
+          btn.classList.toggle('is-active', isActive);
+          btn.setAttribute('aria-selected', String(isActive));
+        });
       }
     });
     document.getElementById('cmd-input').addEventListener('input', e => {
@@ -2861,25 +2978,38 @@
       }
     });
 
-    // Context Menu & Inline Picker Keyboard Navigation (ArrowDown / ArrowUp / Home / End)
+    // Context Menu & Inline Picker Keyboard & Hover Sync (Single Unified Highlight)
     ['context-menu', 'inline-picker'].forEach(menuId => {
-      document.getElementById(menuId)?.addEventListener('keydown', e => {
-        const menuEl = e.currentTarget;
+      const menuEl = document.getElementById(menuId);
+      if (!menuEl) return;
+
+      menuEl.addEventListener('mouseover', e => {
+        const item = e.target.closest('.ctx-item');
+        if (item && document.activeElement !== item) {
+          item.focus({ preventScroll: true });
+        }
+      });
+
+      menuEl.addEventListener('mouseleave', () => {
+        menuEl.focus({ preventScroll: true });
+      });
+
+      menuEl.addEventListener('keydown', e => {
         const items = [...menuEl.querySelectorAll('.ctx-item')];
         if (items.length === 0) return;
         const idx = items.indexOf(document.activeElement);
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          items[(idx + 1) % items.length].focus();
+          items[(idx + 1) % items.length].focus({ preventScroll: true });
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
-          items[(idx - 1 + items.length) % items.length].focus();
+          items[(idx - 1 + items.length) % items.length].focus({ preventScroll: true });
         } else if (e.key === 'Home') {
           e.preventDefault();
-          items[0].focus();
+          items[0].focus({ preventScroll: true });
         } else if (e.key === 'End') {
           e.preventDefault();
-          items[items.length - 1].focus();
+          items[items.length - 1].focus({ preventScroll: true });
         }
       });
     });
@@ -2892,20 +3022,57 @@
       openContextMenu(target.dataset.baseId, e.clientX, e.clientY);
     });
 
+    // Capture-phase Outside Pointerdown & Scroll Dismissal (Never bypassed by stopPropagation)
+    document.addEventListener(
+      'pointerdown',
+      e => {
+        if (!e.target.closest('.popover-anchor') && !e.target.closest('#active-origin-pill')) {
+          closeAllPopovers();
+        }
+        const activeTrigger = state.floatingMenu.triggerEl;
+        if (
+          !e.target.closest('#context-menu') &&
+          !e.target.closest('#inline-picker') &&
+          (!activeTrigger || !activeTrigger.contains(e.target))
+        ) {
+          closeContextMenus();
+        }
+      },
+      true
+    );
+
+    window.addEventListener(
+      'scroll',
+      e => {
+        if (
+          e.target &&
+          e.target.closest &&
+          (e.target.closest('#context-menu') || e.target.closest('#inline-picker'))
+        ) {
+          return;
+        }
+        if (!document.getElementById('context-menu').hidden || !document.getElementById('inline-picker').hidden) {
+          closeContextMenus();
+        }
+      },
+      true
+    );
+
     // Delegated Click Handler
     document.body.addEventListener('click', async e => {
-      // Close popovers/menus if clicking outside
-      if (!e.target.closest('.popover-anchor')) {
-        closeAllPopovers();
-      }
-      if (
-        !e.target.closest('#context-menu') &&
-        !e.target.closest('#inline-picker') &&
-        !e.target.closest('[data-open-ctx]') &&
-        !e.target.closest('[data-status-picker]') &&
-        !e.target.closest('[data-tier-picker]')
-      ) {
-        closeContextMenus();
+      // Reset All Filters (from Empty State button)
+      if (e.target.closest('[data-reset-all-filters]')) {
+        state.filters.status = 'all';
+        state.filters.query = '';
+        searchInput.value = '';
+        syncSearchAffordances();
+        document.querySelectorAll('.filter-pill').forEach(b => {
+          const active = b.dataset.status === 'all';
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-selected', String(active));
+        });
+        resetFacets();
+        return;
       }
 
       // Remove Active Facet Chip
@@ -2977,12 +3144,12 @@
         return;
       }
 
-      // Open Context Menu via ⋯ button
+      // Open Context Menu via ⋯ button (or close if already open on this button)
       const ctxBtn = e.target.closest('[data-open-ctx]');
       if (ctxBtn) {
         e.stopPropagation();
         const rect = ctxBtn.getBoundingClientRect();
-        openContextMenu(ctxBtn.dataset.openCtx, rect.left, rect.bottom + 4);
+        openContextMenu(ctxBtn.dataset.openCtx, rect.left, rect.bottom + 4, ctxBtn);
         return;
       }
 
@@ -3299,6 +3466,7 @@
     viewport.addEventListener('dblclick', () => applyDossierOpticalPreset('full'));
     viewport.addEventListener('mousedown', e => {
       state.dossierTransform.isDragging = true;
+      viewport.classList.add('is-dragging');
       state.dossierTransform.startX = e.clientX - state.dossierTransform.x;
       state.dossierTransform.startY = e.clientY - state.dossierTransform.y;
     });
@@ -3309,7 +3477,10 @@
       updateDossierImageTransform();
     });
     window.addEventListener('mouseup', () => {
-      state.dossierTransform.isDragging = false;
+      if (state.dossierTransform.isDragging) {
+        state.dossierTransform.isDragging = false;
+        viewport.classList.remove('is-dragging');
+      }
     });
 
     const navigateDossier = dir => {
@@ -3460,7 +3631,10 @@
       if (e.key === 'Escape') {
         if (state.cmd.isOpen) return closeCommandModal();
         if (!document.getElementById('context-menu').hidden || !document.getElementById('inline-picker').hidden) {
-          return closeContextMenus();
+          const prevTrigger = state.floatingMenu.triggerEl;
+          closeContextMenus();
+          prevTrigger?.focus?.({ preventScroll: true });
+          return;
         }
         closeAllPopovers();
         if (!document.getElementById('dossier-modal').hidden) return closeDossier();
@@ -3513,6 +3687,7 @@
     });
 
     window.addEventListener('resize', () => {
+      closeContextMenus();
       if (state.activeView === 'map') drawMapCanvas();
     });
   }

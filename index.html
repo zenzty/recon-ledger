@@ -279,6 +279,14 @@
             autocomplete="off"
             aria-label="Filter bases"
           />
+          <button
+            type="button"
+            class="search-clear-btn"
+            id="btn-clear-search"
+            aria-label="Clear search filter"
+            title="Clear search (Esc)"
+            hidden
+          >×</button>
           <kbd class="search-kbd" id="search-kbd-hint">/</kbd>
         </div>
 
@@ -312,9 +320,11 @@
               <div class="sort-control-row">
                 <select id="sort-select" class="form-select input-sm">
                   <option value="priority">Status &amp; Loot Tier</option>
+                  <option value="tier">Loot Value Tier</option>
                   <option value="plate">Plate Index (01–16)</option>
                   <option value="distance">Distance from Origin</option>
                   <option value="depth">Depth (Block Y)</option>
+                  <option value="x">Overworld X Coordinate</option>
                   <option value="name">Base Name (A–Z)</option>
                 </select>
                 <button type="button" class="btn-secondary btn-sm mono" id="btn-sort-dir" title="Toggle ascending / descending">
@@ -385,7 +395,7 @@
               <div class="table-subbar-left">
                 <span class="mono" id="table-row-summary">Showing 16 of 16 bases</span>
                 <span class="table-subbar-sep">·</span>
-                <span class="table-hint">Double-click Name or Loot to edit inline · Shift+Click checkboxes to range-select · Right-click row for actions</span>
+                <span class="table-hint">Click ✎ (or F2) to rename · Double-click Loot to edit inline · Shift+Click to range-select · Right-click row for actions</span>
               </div>
               <div class="table-subbar-right">
                 <button type="button" class="btn-link" id="btn-toggle-preview-inline">Hide Preview Pane</button>
@@ -946,7 +956,7 @@
           aria-autocomplete="list"
           aria-controls="cmd-list"
         />
-        <kbd class="kbd-token">ESC</kbd>
+        <button type="button" class="btn-secondary btn-xs mono" id="cmd-close" title="Close (Esc)">Esc</button>
       </div>
       <div id="cmd-list" class="cmd-list" role="listbox"></div>
       <div class="cmd-footer">
@@ -958,10 +968,10 @@
   </div>
 
   <!-- SCOPED CONTEXT MENU (Right-Click or ⋯ Button on any Card / Row) -->
-  <div id="context-menu" class="context-menu" role="menu" hidden></div>
+  <div id="context-menu" class="context-menu" role="menu" tabindex="-1" hidden></div>
 
   <!-- INLINE DROPDOWN POPOVER (For instant Status / Tier selection in Table & Grid) -->
-  <div id="inline-picker" class="context-menu inline-picker" role="menu" hidden></div>
+  <div id="inline-picker" class="context-menu inline-picker" role="menu" tabindex="-1" hidden></div>
 
   <!-- Toast -->
   <div id="toast-bar" class="toast-bar" role="status" aria-live="polite" hidden></div>
