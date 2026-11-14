@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SMP Bases</title>
+  <title>SMP Bases — Raid &amp; Waypoint Index</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -13,31 +13,26 @@
   <!-- Drag-and-Drop Overlay -->
   <div id="dropzone-overlay" class="dropzone-overlay" hidden>
     <div class="dropzone-frame">
-      <div class="dropzone-title">Drop Screenshot to Add Base</div>
-      <div class="dropzone-sub">Reads player name and F3 coordinates automatically</div>
+      <div class="dropzone-title">Drop F3 Screenshot to Add Base</div>
+      <div class="dropzone-sub">Automatically extracts player name and coordinates</div>
     </div>
   </div>
 
   <div class="page-shell">
-    <!-- Minimal Header -->
+    <!-- Top Masthead -->
     <header class="site-header">
-      <div class="header-left">
+      <div class="header-brand">
         <h1 class="site-title">Bases</h1>
-        <span class="site-count" id="header-summary">16 targets</span>
+        <span class="site-divider">/</span>
+        <span class="site-subtitle" id="header-summary">16 cataloged · 9 priority</span>
       </div>
 
-      <nav class="view-switch" aria-label="View mode">
-        <button type="button" class="view-btn is-active" data-view="grid">Grid</button>
-        <button type="button" class="view-btn" data-view="table">Table</button>
-        <button type="button" class="view-btn" data-view="map">Map</button>
-      </nav>
-
-      <div class="header-right">
-        <button type="button" class="btn-ghost" id="btn-export-xaero" title="Copy all active unraided waypoints for Xaero's Minimap">
+      <div class="header-actions">
+        <button type="button" class="btn-secondary" id="btn-export-xaero" title="Copy all active unraided waypoints to paste in Minecraft chat">
           Copy All Xaero
         </button>
-        <button type="button" class="btn-ghost" id="btn-download-xaero" title="Download mw$default_1.txt waypoint file">
-          Download .txt
+        <button type="button" class="btn-secondary" id="btn-download-xaero" title="Download mw$default_1.txt waypoint file for Xaero's Minimap">
+          Export .txt
         </button>
         <button type="button" class="btn-primary" id="btn-open-ingest">
           + Add Base
@@ -45,53 +40,70 @@
       </div>
     </header>
 
-    <!-- Minimal Filter Bar -->
-    <section class="filter-bar">
-      <div class="status-tabs" id="filter-status">
-        <button type="button" class="status-tab is-active" data-status="all">
-          All <span class="tab-count" id="count-all">16</span>
+    <!-- Unified Control Bar: Status Filters (Left) + Search & View Switcher (Right) -->
+    <section class="toolbar" aria-label="Filters and view controls">
+      <div class="filter-pills" id="filter-status" role="tablist" aria-label="Filter by raid status">
+        <button type="button" class="filter-pill is-active" data-status="all">
+          <span>All</span>
+          <span class="pill-count" id="count-all">16</span>
         </button>
-        <button type="button" class="status-tab" data-status="priority">
-          Priority <span class="tab-count" id="count-priority">9</span>
+        <button type="button" class="filter-pill" data-status="priority">
+          <span class="status-dot dot-priority"></span>
+          <span>Priority</span>
+          <span class="pill-count" id="count-priority">9</span>
         </button>
-        <button type="button" class="status-tab" data-status="scouted">
-          Scouted <span class="tab-count" id="count-scouted">7</span>
+        <button type="button" class="filter-pill" data-status="scouted">
+          <span class="status-dot dot-scouted"></span>
+          <span>Scouted</span>
+          <span class="pill-count" id="count-scouted">7</span>
         </button>
-        <button type="button" class="status-tab" data-status="raided">
-          Raided <span class="tab-count" id="count-raided">0</span>
+        <button type="button" class="filter-pill" data-status="raided">
+          <span class="status-dot dot-raided"></span>
+          <span>Raided</span>
+          <span class="pill-count" id="count-raided">0</span>
         </button>
       </div>
 
-      <div class="filter-controls">
-        <input
-          type="search"
-          id="search-input"
-          class="search-input"
-          placeholder="Search name, coords, notes..."
-          autocomplete="off"
-        />
+      <div class="toolbar-right">
+        <div class="search-wrap">
+          <input
+            type="search"
+            id="search-input"
+            class="search-input"
+            placeholder="Filter bases, coords, loot..."
+            autocomplete="off"
+            aria-label="Filter bases"
+          />
+          <kbd class="search-kbd" id="search-kbd-hint">/</kbd>
+        </div>
+
+        <nav class="view-segmented" aria-label="Display layout">
+          <button type="button" class="seg-item is-active" data-view="grid">Grid</button>
+          <button type="button" class="seg-item" data-view="table">Table</button>
+          <button type="button" class="seg-item" data-view="map">Map</button>
+        </nav>
       </div>
     </section>
 
-    <!-- MAIN CONTENT -->
+    <!-- MAIN WORKSPACE -->
     <main class="main-content">
-      <!-- VIEW 1: MINIMAL GRID -->
+      <!-- VIEW 1: GRID -->
       <section id="view-grid" class="view-section">
         <div id="bases-grid" class="bases-grid"></div>
       </section>
 
-      <!-- VIEW 2: MINIMAL TABLE -->
+      <!-- VIEW 2: TABLE -->
       <section id="view-table" class="view-section" hidden>
-        <div class="table-wrap">
+        <div class="table-surface">
           <table class="bases-table">
             <thead>
               <tr>
-                <th>Base</th>
-                <th>Status</th>
-                <th class="num">Coords (X, Y, Z)</th>
-                <th class="num">Nether (÷8)</th>
-                <th>Notes</th>
-                <th class="num">Actions</th>
+                <th class="th-sortable" data-sort="name">Base</th>
+                <th class="th-sortable" data-sort="status">Status</th>
+                <th>Loot &amp; Notes</th>
+                <th class="num th-sortable" data-sort="distance">Overworld (X, Y, Z)</th>
+                <th class="num">Nether Roof (÷8)</th>
+                <th class="num">Waypoint</th>
               </tr>
             </thead>
             <tbody id="bases-tbody"></tbody>
@@ -99,69 +111,74 @@
         </div>
       </section>
 
-      <!-- VIEW 3: MINIMAL 2D MAP -->
+      <!-- VIEW 3: 2D COORDINATE MAP -->
       <section id="view-map" class="view-section" hidden>
-        <div class="map-container">
+        <div class="map-frame">
           <div class="map-stage" id="radar-container">
             <canvas id="radar-canvas"></canvas>
-            <div class="map-legend">
-              <span class="map-coord-readout" id="radar-cursor-readout">0, 0</span>
-              <button type="button" class="btn-text" id="radar-reset-view">Reset Zoom</button>
+            <div class="map-hud-top">
+              <span class="hud-legend"><i class="status-dot dot-priority"></i> Priority</span>
+              <span class="hud-legend"><i class="status-dot dot-scouted"></i> Scouted</span>
+              <span class="hud-legend"><i class="status-dot dot-raided"></i> Raided</span>
+            </div>
+            <div class="map-hud-bottom">
+              <span class="map-coord-readout" id="radar-cursor-readout">X: 0, Z: 0</span>
+              <button type="button" class="btn-link" id="radar-reset-view">Reset View</button>
             </div>
           </div>
-          <aside class="map-card" id="map-selected-card" hidden></aside>
+          <aside class="map-inspector" id="map-selected-card" hidden></aside>
         </div>
       </section>
     </main>
   </div>
 
   <!-- DETAIL & EDIT MODAL -->
-  <div id="dossier-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true">
-    <div class="modal-sheet modal-sheet-wide">
-      <header class="modal-header">
-        <div class="modal-title-wrap">
+  <div id="dossier-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="dossier-title">
+    <div class="modal-dialog modal-wide">
+      <header class="modal-topbar">
+        <div class="modal-heading-group">
           <h2 class="modal-title" id="dossier-title">artap2</h2>
-          <span class="modal-sub" id="dossier-coords-sub">-4920, -18, -1237</span>
+          <span class="modal-coord-pill" id="dossier-coords-sub">-4920, -18, -1237</span>
         </div>
-        <div class="modal-header-actions">
-          <button type="button" class="btn-ghost" id="dossier-prev">← Prev</button>
-          <button type="button" class="btn-ghost" id="dossier-next">Next →</button>
-          <button type="button" class="btn-ghost" id="dossier-close">Close</button>
+        <div class="modal-nav-group">
+          <button type="button" class="btn-secondary btn-sm" id="dossier-prev" title="Previous base (←)">← Prev</button>
+          <button type="button" class="btn-secondary btn-sm" id="dossier-next" title="Next base (→)">Next →</button>
+          <button type="button" class="btn-secondary btn-sm" id="dossier-close" title="Close (Esc)">Esc</button>
         </div>
       </header>
 
-      <div class="dossier-layout">
-        <div class="dossier-image-col">
-          <div class="dossier-viewport" id="dossier-viewport" title="Scroll to zoom, drag to pan, double-click to reset">
-            <img id="dossier-img" src="" alt="Base screenshot" draggable="false" />
+      <div class="dossier-split">
+        <div class="dossier-media-pane">
+          <div class="dossier-viewport" id="dossier-viewport">
+            <img id="dossier-img" src="" alt="Base reconnaissance screenshot" draggable="false" />
           </div>
-          <div class="dossier-image-bar">
-            <span class="muted-hint">Scroll to zoom · Drag to pan · Double-click to reset</span>
-            <div class="quick-copy-row">
-              <button type="button" class="btn-ghost" id="dossier-copy-xyz">Copy XYZ</button>
-              <button type="button" class="btn-primary" id="dossier-copy-xaero">Copy Xaero Waypoint</button>
+          <div class="dossier-media-bar">
+            <span class="media-hint">Scroll to zoom · Drag to pan · Double-click to reset</span>
+            <div class="media-actions">
+              <button type="button" class="btn-secondary btn-sm" id="dossier-copy-xyz">Copy XYZ</button>
+              <button type="button" class="btn-primary btn-sm" id="dossier-copy-xaero">Copy Xaero Waypoint</button>
             </div>
           </div>
         </div>
 
-        <form id="dossier-form" class="dossier-form">
-          <div class="field">
+        <form id="dossier-form" class="dossier-inspector-form">
+          <div class="form-group">
             <label for="edit-name">Base / Player Name</label>
-            <input type="text" id="edit-name" class="input" required />
+            <input type="text" id="edit-name" class="form-input" required />
           </div>
 
-          <div class="field-row-2">
-            <div class="field">
+          <div class="form-row-2">
+            <div class="form-group">
               <label for="edit-status">Status</label>
-              <select id="edit-status" class="select">
+              <select id="edit-status" class="form-select">
                 <option value="priority">Priority (To Raid)</option>
                 <option value="scouted">Scouted</option>
-                <option value="raided">Raided (Done)</option>
+                <option value="raided">Raided (Cleared)</option>
               </select>
             </div>
-            <div class="field">
+            <div class="form-group">
               <label for="edit-dimension">Dimension</label>
-              <select id="edit-dimension" class="select">
+              <select id="edit-dimension" class="form-select">
                 <option value="overworld">Overworld</option>
                 <option value="the_end">The End</option>
                 <option value="the_nether">Nether</option>
@@ -169,37 +186,37 @@
             </div>
           </div>
 
-          <div class="field-row-3">
-            <div class="field">
-              <label for="edit-x">X</label>
-              <input type="number" id="edit-x" class="input mono" required />
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="edit-x">Block X</label>
+              <input type="number" id="edit-x" class="form-input mono" required />
             </div>
-            <div class="field">
-              <label for="edit-y">Y</label>
-              <input type="number" id="edit-y" class="input mono" required />
+            <div class="form-group">
+              <label for="edit-y">Block Y</label>
+              <input type="number" id="edit-y" class="form-input mono" required />
             </div>
-            <div class="field">
-              <label for="edit-z">Z</label>
-              <input type="number" id="edit-z" class="input mono" required />
+            <div class="form-group">
+              <label for="edit-z">Block Z</label>
+              <input type="number" id="edit-z" class="form-input mono" required />
             </div>
           </div>
 
-          <div class="nether-readout" id="dossier-nether-readout">
-            Nether Roof (÷8): -615, 128, -155
+          <div class="nether-callout" id="dossier-nether-readout">
+            Nether Roof Portal (÷8): -615, 128, -155
           </div>
 
-          <div class="field">
-            <label for="edit-containers">Loot Summary (1 line)</label>
-            <input type="text" id="edit-containers" class="input" placeholder="e.g. 15 chests, 2 shulkers, spawner" />
+          <div class="form-group">
+            <label for="edit-containers">Visible Loot / Infrastructure</label>
+            <input type="text" id="edit-containers" class="form-input" placeholder="e.g. 15 double chests, 2 shulkers, spawner" />
           </div>
 
-          <div class="field">
-            <label for="edit-notes">Notes</label>
-            <textarea id="edit-notes" class="textarea" rows="4" placeholder="Details, online players, access route..."></textarea>
+          <div class="form-group">
+            <label for="edit-notes">Field Notes</label>
+            <textarea id="edit-notes" class="form-textarea" rows="4" placeholder="Spotted players, defenses, access notes..."></textarea>
           </div>
 
-          <div class="form-footer">
-            <button type="button" class="btn-danger" id="btn-delete-base">Delete</button>
+          <div class="form-actions-bar">
+            <button type="button" class="btn-danger" id="btn-delete-base">Delete Base</button>
             <button type="submit" class="btn-primary">Save Changes</button>
           </div>
         </form>
@@ -208,31 +225,31 @@
   </div>
 
   <!-- ADD BASE MODAL -->
-  <div id="ingest-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true">
-    <div class="modal-sheet modal-sheet-narrow">
-      <header class="modal-header">
-        <h2 class="modal-title">Add Base</h2>
-        <button type="button" class="btn-ghost" id="ingest-close">Close</button>
+  <div id="ingest-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="ingest-heading">
+    <div class="modal-dialog modal-narrow">
+      <header class="modal-topbar">
+        <h2 class="modal-title" id="ingest-heading">Add Base</h2>
+        <button type="button" class="btn-secondary btn-sm" id="ingest-close">Esc</button>
       </header>
 
-      <form id="ingest-form" class="ingest-form">
-        <label for="ingest-file-input" class="upload-box" id="ingest-drop-box">
+      <form id="ingest-form" class="dossier-inspector-form">
+        <label for="ingest-file-input" class="drop-upload-zone" id="ingest-drop-box">
           <input type="file" id="ingest-file-input" accept="image/png,image/jpeg,image/webp" hidden />
           <div id="ingest-preview-empty">
-            <div class="upload-title">Drop F3 screenshot or click to upload</div>
-            <div class="upload-sub" id="ocr-status-text">Optional — auto-fills name and coordinates</div>
+            <div class="upload-headline">Drop F3 screenshot or click to browse</div>
+            <div class="upload-caption" id="ocr-status-text">Optional — automatically reads player name and Block XYZ</div>
           </div>
           <img id="ingest-preview-img" src="" alt="Preview" hidden />
         </label>
 
-        <div class="field-row-2">
-          <div class="field">
+        <div class="form-row-2">
+          <div class="form-group">
             <label for="new-name">Name *</label>
-            <input type="text" id="new-name" class="input" required placeholder="Player or base name" />
+            <input type="text" id="new-name" class="form-input" required placeholder="e.g. artap2" />
           </div>
-          <div class="field">
+          <div class="form-group">
             <label for="new-status">Status</label>
-            <select id="new-status" class="select">
+            <select id="new-status" class="form-select">
               <option value="priority">Priority (To Raid)</option>
               <option value="scouted" selected>Scouted</option>
               <option value="raided">Raided</option>
@@ -240,43 +257,43 @@
           </div>
         </div>
 
-        <div class="field-row-3">
-          <div class="field">
-            <label for="new-x">X *</label>
-            <input type="number" id="new-x" class="input mono" required placeholder="-4920" />
+        <div class="form-row-3">
+          <div class="form-group">
+            <label for="new-x">Block X *</label>
+            <input type="number" id="new-x" class="form-input mono" required placeholder="-4920" />
           </div>
-          <div class="field">
-            <label for="new-y">Y *</label>
-            <input type="number" id="new-y" class="input mono" required value="-54" />
+          <div class="form-group">
+            <label for="new-y">Block Y *</label>
+            <input type="number" id="new-y" class="form-input mono" required value="-54" />
           </div>
-          <div class="field">
-            <label for="new-z">Z *</label>
-            <input type="number" id="new-z" class="input mono" required placeholder="-1237" />
+          <div class="form-group">
+            <label for="new-z">Block Z *</label>
+            <input type="number" id="new-z" class="form-input mono" required placeholder="-1237" />
           </div>
         </div>
 
-        <div class="field-row-2">
-          <div class="field">
+        <div class="form-row-2">
+          <div class="form-group">
             <label for="new-dimension">Dimension</label>
-            <select id="new-dimension" class="select">
+            <select id="new-dimension" class="form-select">
               <option value="overworld">Overworld</option>
               <option value="the_end">The End</option>
               <option value="the_nether">Nether</option>
             </select>
           </div>
-          <div class="field">
+          <div class="form-group">
             <label for="new-containers">Loot Summary</label>
-            <input type="text" id="new-containers" class="input" placeholder="e.g. Shulkers, villager hall" />
+            <input type="text" id="new-containers" class="form-input" placeholder="e.g. 2 shulkers, villager hall" />
           </div>
         </div>
 
-        <div class="field">
+        <div class="form-group">
           <label for="new-notes">Notes</label>
-          <textarea id="new-notes" class="textarea" rows="2" placeholder="Optional notes..."></textarea>
+          <textarea id="new-notes" class="form-textarea" rows="2" placeholder="Optional raid notes..."></textarea>
         </div>
 
-        <div class="form-footer">
-          <button type="button" class="btn-ghost" id="ingest-cancel">Cancel</button>
+        <div class="form-actions-bar">
+          <button type="button" class="btn-secondary" id="ingest-cancel">Cancel</button>
           <button type="submit" class="btn-primary">Add Base</button>
         </div>
       </form>

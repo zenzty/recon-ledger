@@ -22,6 +22,7 @@
   ]);
 
   const STATUS_CYCLE = ['priority', 'scouted', 'raided'];
+  const STATUS_ORDER = { priority: 0, scouted: 1, raided: 2 };
   const STATUS_LABELS = {
     priority: 'Priority',
     scouted: 'Scouted',
@@ -35,6 +36,8 @@
     activeView: 'grid', // 'grid' | 'table' | 'map'
     filterStatus: 'all',
     searchQuery: '',
+    sortField: 'status', // 'status' | 'name' | 'distance'
+    sortAsc: true,
     dossierBaseId: null,
     dossierTransform: { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 },
     mapSelectedId: null,
@@ -62,6 +65,10 @@
       .replace(/"/g, '&quot;');
   }
 
+  function normalizeStatus(s) {
+    return s === 'compromised' ? 'scouted' : s || 'scouted';
+  }
+
   function getNetherCoords(base) {
     if (base.dimension === 'the_end') return null;
     if (base.dimension === 'the_nether') return { x: base.x, y: base.y, z: base.z };
@@ -74,8 +81,9 @@
       .replace(/[\r\n]+/g, ' ')
       .trim();
     const initials = cleanName.slice(0, 2).toUpperCase() || 'B';
-    const color = base.status === 'priority' ? 12 : base.status === 'raided' ? 7 : 14;
-    const disabled = base.status === 'raided' ? 'true' : 'false';
+    const st = normalizeStatus(base.status);
+    const color = st === 'priority' ? 12 : st === 'raided' ? 7 : 14;
+    const disabled = st === 'raided' ? 'true' : 'false';
 
     let dimFolder = 'Internal-overworld-waypoints';
     if (base.dimension === 'the_nether') dimFolder = 'Internal-the_nether-waypoints';
@@ -107,7 +115,23 @@
     }, 2200);
   }
 
-  async function copyText(text, label = 'Copied') {
+  function flashInlineCopied(el, tempText = '✓ Copied') {
+    if (!el) return;
+    if (!el.dataset.origText) {
+      el.dataset.origText = el.textContent;
+    }
+    el.classList.add('is-copied');
+    el.textContent = tempText;
+    clearTimeout(el._copyTimer);
+    el._copyTimer = setTimeout(() => {
+      el.classList.remove('is-copied');
+      if (el.dataset.origText) {
+        el.textContent = el.dataset.origText;
+      }
+    }, 1350);
+  }
+
+  async function copyText(text, label = 'Copied', triggerEl = null, inlineLabel = '✓ Copied') {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -117,6 +141,9 @@
       ta.select();
       document.execCommand('copy');
       ta.remove();
+    }
+    if (triggerEl) {
+      flashInlineCopied(triggerEl, inlineLabel);
     }
     showToast(label);
   }
@@ -228,16 +255,12 @@
   }
 
   // ============================================================================
-  // FILTERING & RENDERING
+  // FILTERING, SORTING & RENDERING
   // ============================================================================
-
-  function normalizeStatus(s) {
-    return s === 'compromised' ? 'scouted' : s || 'scouted';
-  }
 
   function getFilteredBases() {
     const q = state.searchQuery.trim().toLowerCase();
-    return state.bases.filter(b => {
+    const list = state.bases.filter(b => {
       const st = normalizeStatus(b.status);
       if (state.filterStatus !== 'all' && st !== state.filterStatus) return false;
       if (q) {
@@ -246,6 +269,25 @@
       }
       return true;
     });
+
+    const dir = state.sortAsc ? 1 : -1;
+    list.sort((a, b) => {
+      if (state.sortField === 'name') {
+        return a.name.localeCompare(b.name) * dir;
+      }
+      if (state.sortField === 'distance') {
+        const da = Math.hypot(a.x, a.z);
+        const db = Math.hypot(b.x, b.z);
+        return (da - db) * dir;
+      }
+      // Default: sort by status (Priority -> Scouted -> Raided), then name
+      const sa = STATUS_ORDER[normalizeStatus(a.status)] ?? 1;
+      const sb = STATUS_ORDER[normalizeStatus(b.status)] ?? 1;
+      if (sa !== sb) return (sa - sb) * dir;
+      return a.name.localeCompare(b.name);
+    });
+
+    return list;
   }
 
   function renderCounts() {
@@ -253,9 +295,11 @@
     const priority = state.bases.filter(b => normalizeStatus(b.status) === 'priority').length;
     const scouted = state.bases.filter(b => normalizeStatus(b.status) === 'scouted').length;
     const raided = state.bases.filter(b => normalizeStatus(b.status) === 'raided').length;
-    const active = total - raided;
 
-    document.getElementById('header-summary').textContent = `${total} bases · ${active} active`;
+    const summaryParts = [`${total} cataloged`, `${priority} priority`];
+    if (raided > 0) summaryParts.push(`${raided} raided`);
+
+    document.getElementById('header-summary').textContent = summaryParts.join(' · ');
     document.getElementById('count-all').textContent = total;
     document.getElementById('count-priority').textContent = priority;
     document.getElementById('count-scouted').textContent = scouted;
@@ -265,7 +309,7 @@
   function renderGrid(filtered) {
     const grid = document.getElementById('bases-grid');
     if (filtered.length === 0) {
-      grid.innerHTML = `<div style="grid-column:1/-1;padding:48px 0;text-align:center;color:var(--text-muted);">No matching bases found.</div>`;
+      grid.innerHTML = `<div style="grid-column:1/-1;padding:64px 0;text-align:center;color:var(--text-muted);">No matching bases found.</div>`;
       return;
     }
 
@@ -278,54 +322,52 @@
         const focusOrigin = base.cropFocus || '50% 50%';
         const xyzCopy = `${base.x} ${base.y} ${base.z}`;
         const netherCopy = nc ? `${nc.x} 128 ${nc.z}` : '';
-        const summary = base.containers || base.notes || 'No notes';
+        const summary = base.containers || base.notes || 'No field notes recorded';
 
         return `
           <article class="base-card ${st === 'raided' ? 'is-raided' : ''}">
-            <div class="card-image-wrap" data-open-dossier="${escapeHtml(base.id)}">
+            <div class="card-media" data-open-dossier="${escapeHtml(base.id)}">
               ${
                 imgSrc
-                  ? `<img src="${imgSrc}" alt="${escapeHtml(base.name)}" style="transform-origin:${escapeHtml(focusOrigin)};object-position:${escapeHtml(focusOrigin)};" />`
+                  ? `<img src="${imgSrc}" alt="${escapeHtml(base.name)}" loading="lazy" style="transform-origin:${escapeHtml(focusOrigin)};object-position:${escapeHtml(focusOrigin)};" />`
                   : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:12px;">No screenshot</div>`
               }
             </div>
 
-            <div class="card-content">
-              <div class="card-top-row">
-                <div class="card-title-group">
+            <div class="card-body">
+              <div class="card-header-row">
+                <div class="card-title-wrap">
                   <h2 class="card-title" data-open-dossier="${escapeHtml(base.id)}">${escapeHtml(base.name)}</h2>
-                  ${base.dimension === 'the_end' ? `<span class="dim-badge">The End</span>` : ''}
-                  ${base.dimension === 'the_nether' ? `<span class="dim-badge">Nether</span>` : ''}
+                  ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
+                  ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
                 </div>
                 <button
                   type="button"
-                  class="status-badge is-${st}"
+                  class="status-tag is-${st}"
                   data-cycle-status="${escapeHtml(base.id)}"
-                  title="Click to change status"
-                >${stLabel}</button>
-              </div>
-
-              <div class="card-coords-row">
-                <span class="coord-main" data-copy="${escapeHtml(xyzCopy)}" title="Click to copy X Y Z">
-                  ${base.x}, ${base.y}, ${base.z}
-                </span>
-                ${
-                  nc
-                    ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof coords">Nether: ${nc.x}, ${nc.z}</span>`
-                    : `<span class="coord-nether">End Dimension</span>`
-                }
-              </div>
-
-              <div class="card-summary" title="${escapeHtml(summary)}">
-                ${escapeHtml(summary)}
-              </div>
-
-              <div class="card-actions">
-                <button type="button" class="card-btn card-btn-primary" data-copy-xaero="${escapeHtml(base.id)}">
-                  Copy Xaero
+                  title="Click to cycle status (Priority → Scouted → Raided)"
+                >
+                  <span class="status-dot dot-${st}"></span>
+                  <span>${stLabel}</span>
                 </button>
-                <button type="button" class="card-btn" data-open-dossier="${escapeHtml(base.id)}">
-                  Edit / View
+              </div>
+
+              <p class="card-desc" title="${escapeHtml(summary)}">${escapeHtml(summary)}</p>
+
+              <div class="card-footer-row">
+                <div class="coord-group">
+                  <span class="coord-xyz" data-copy="${escapeHtml(xyzCopy)}" title="Click to copy Overworld XYZ">
+                    ${base.x}, ${base.y}, ${base.z}
+                  </span>
+                  ${
+                    nc
+                      ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof coordinates (X÷8, Z÷8)">· N: ${nc.x}, ${nc.z}</span>`
+                      : `<span class="coord-nether">· End</span>`
+                  }
+                </div>
+
+                <button type="button" class="xaero-copy-btn" data-copy-xaero="${escapeHtml(base.id)}" title="Copy Xaero's Minimap waypoint string">
+                  Copy Xaero
                 </button>
               </div>
             </div>
@@ -337,41 +379,58 @@
 
   function renderTable(filtered) {
     const tbody = document.getElementById('bases-tbody');
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="padding:48px 18px;text-align:center;color:var(--text-muted);">No matching bases found.</td></tr>`;
+      return;
+    }
+
     tbody.innerHTML = filtered
       .map(base => {
         const st = normalizeStatus(base.status);
         const stLabel = STATUS_LABELS[st] || 'Scouted';
         const nc = getNetherCoords(base);
-        const imgSrc = getPlateSrc(base.image);
         const summary = base.containers || base.notes || '—';
+        const xyzCopy = `${base.x} ${base.y} ${base.z}`;
+        const netherCopy = nc ? `${nc.x} 128 ${nc.z}` : '';
 
         return `
           <tr class="${st === 'raided' ? 'is-raided' : ''}">
             <td>
-              <div class="table-name-cell" data-open-dossier="${escapeHtml(base.id)}">
-                ${imgSrc ? `<img class="table-thumb" src="${imgSrc}" alt="" />` : ''}
-                <div>
-                  <strong>${escapeHtml(base.name)}</strong>
-                  ${base.dimension === 'the_end' ? `<span class="dim-badge" style="margin-left:6px;">The End</span>` : ''}
-                </div>
-              </div>
-            </td>
-            <td>
-              <button type="button" class="status-badge is-${st}" data-cycle-status="${escapeHtml(base.id)}">
-                ${stLabel}
+              <button type="button" class="row-title-btn" data-open-dossier="${escapeHtml(base.id)}">
+                <span class="status-dot dot-${st}"></span>
+                <span>${escapeHtml(base.name)}</span>
+                ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
+                ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
               </button>
             </td>
-            <td class="num" style="cursor:pointer;" data-copy="${base.x} ${base.y} ${base.z}" title="Click to copy">
-              ${base.x}, ${base.y}, ${base.z}
+            <td>
+              <button
+                type="button"
+                class="status-tag is-${st}"
+                data-cycle-status="${escapeHtml(base.id)}"
+                title="Click to cycle status"
+              >
+                <span class="status-dot dot-${st}"></span>
+                <span>${stLabel}</span>
+              </button>
             </td>
-            <td class="num" style="color:var(--text-secondary);cursor:pointer;" data-copy="${nc ? `${nc.x} 128 ${nc.z}` : ''}">
-              ${nc ? `${nc.x}, ${nc.z}` : '—'}
-            </td>
-            <td style="color:var(--text-secondary);max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            <td style="color:var(--text-secondary);max-width:340px;overflow:hidden;text-overflow:ellipsis;">
               ${escapeHtml(summary)}
             </td>
             <td class="num">
-              <button type="button" class="btn-ghost" style="padding:5px 10px;font-size:12px;" data-copy-xaero="${escapeHtml(base.id)}">
+              <span class="coord-xyz" data-copy="${escapeHtml(xyzCopy)}" title="Click to copy Overworld XYZ">
+                ${base.x}, ${base.y}, ${base.z}
+              </span>
+            </td>
+            <td class="num">
+              ${
+                nc
+                  ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof XYZ">${nc.x}, 128, ${nc.z}</span>`
+                  : `<span style="color:var(--text-muted);">—</span>`
+              }
+            </td>
+            <td class="num">
+              <button type="button" class="xaero-copy-btn" data-copy-xaero="${escapeHtml(base.id)}">
                 Copy Xaero
               </button>
             </td>
@@ -382,8 +441,16 @@
   }
 
   // ============================================================================
-  // MINIMAL 2D MAP
+  // 2D COORDINATE MAP
   // ============================================================================
+
+  const LABEL_OFFSETS = {
+    dort930656: { dx: 10, dy: -7 },
+    dort930656_2: { dx: 10, dy: 14 },
+    monalokal2011: { dx: 10, dy: -7 },
+    monalokal2011_2: { dx: 10, dy: 14 },
+    frrrupy: { dx: 10, dy: 14 }
+  };
 
   function drawMapCanvas() {
     const canvas = document.getElementById('radar-canvas');
@@ -402,17 +469,18 @@
     const W = rect.width;
     const H = rect.height;
 
-    ctx.fillStyle = '#090a09';
+    ctx.fillStyle = '#080908';
     ctx.fillRect(0, 0, W, H);
 
-    const worldSpan = 22000 / state.radar.zoom;
+    // 25,200 block span ensures ±10,000 world border has generous padding
+    const worldSpan = 25200 / state.radar.zoom;
     const pxPerBlock = Math.min(W, H) / worldSpan;
 
     const toScreenX = wx => W / 2 + (wx - state.radar.centerX) * pxPerBlock;
     const toScreenY = wz => H / 2 + (wz - state.radar.centerZ) * pxPerBlock;
 
-    // Subtle 2000-block grid
-    ctx.strokeStyle = '#161816';
+    // 2000-block grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let g = -10000; g <= 10000; g += 2000) {
@@ -425,8 +493,8 @@
     }
     ctx.stroke();
 
-    // 0,0 Center Axes
-    ctx.strokeStyle = '#242824';
+    // 0,0 Origin Axes
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.09)';
     ctx.beginPath();
     ctx.moveTo(toScreenX(0), 0);
     ctx.lineTo(toScreenX(0), H);
@@ -439,7 +507,7 @@
     const wbR = toScreenX(10000);
     const wbT = toScreenY(-10000);
     const wbB = toScreenY(10000);
-    ctx.strokeStyle = 'rgba(212, 77, 39, 0.28)';
+    ctx.strokeStyle = 'rgba(232, 106, 71, 0.25)';
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(wbL, wbT, wbR - wbL, wbB - wbT);
     ctx.setLineDash([]);
@@ -452,28 +520,28 @@
       const st = normalizeStatus(base.status);
       const isSelected = state.mapSelectedId === base.id || state.radar.hoveredId === base.id;
 
-      let color = '#c89d3a';
-      if (st === 'priority') color = '#d44d27';
-      else if (st === 'raided') color = '#555854';
+      let color = '#d4a946';
+      if (st === 'priority') color = '#e86a47';
+      else if (st === 'raided') color = '#5e5c56';
 
       if (isSelected) {
-        ctx.strokeStyle = '#ece9e2';
+        ctx.strokeStyle = '#f0ede6';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(sx - 7, sy - 7, 14, 14);
       }
 
       ctx.fillStyle = color;
-      ctx.fillRect(sx - 4, sy - 4, 8, 8);
+      ctx.fillRect(sx - 3.5, sy - 3.5, 7, 7);
 
       const label = base.name;
-      ctx.font = isSelected ? '600 12px "Inter", sans-serif' : '11.5px "Inter", sans-serif';
+      ctx.font = isSelected ? '600 12px "Inter", sans-serif' : '500 11.5px "Inter", sans-serif';
       const tw = ctx.measureText(label).width;
-      const yOffset = base.id === 'frrrupy' ? 14 : -6;
-      const placeLeft = sx + tw + 20 > W;
-      const textX = placeLeft ? sx - tw - 10 : sx + 10;
+      const offset = LABEL_OFFSETS[base.id] || { dx: 9, dy: 4 };
+      const placeLeft = sx + tw + 24 > W;
+      const textX = placeLeft ? sx - tw - 9 : sx + offset.dx;
 
-      ctx.fillStyle = isSelected ? '#ffffff' : '#b8b5ad';
-      ctx.fillText(label, textX, sy + yOffset);
+      ctx.fillStyle = isSelected ? '#ffffff' : 'rgba(240, 237, 230, 0.78)';
+      ctx.fillText(label, textX, sy + offset.dy);
     });
 
     ctx.restore();
@@ -487,25 +555,46 @@
       return;
     }
     card.hidden = false;
+    const st = normalizeStatus(base.status);
+    const stLabel = STATUS_LABELS[st] || 'Scouted';
     const nc = getNetherCoords(base);
     const imgSrc = getPlateSrc(base.image);
+    const focusOrigin = base.cropFocus || '50% 50%';
 
     card.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <strong style="font-size:16px;">${escapeHtml(base.name)}</strong>
-        <button type="button" class="btn-text" id="map-card-close">Close</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <strong style="font-size:15.5px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(base.name)}</strong>
+          <span class="status-tag is-${st}" style="padding:2px 7px;font-size:11px;">
+            <span class="status-dot dot-${st}"></span>${stLabel}
+          </span>
+        </div>
+        <button type="button" class="btn-link" id="map-card-close">Close</button>
       </div>
-      ${imgSrc ? `<img src="${imgSrc}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border:1px solid var(--border);cursor:pointer;" data-open-dossier="${escapeHtml(base.id)}" />` : ''}
-      <div class="mono" style="font-size:13px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);">
-        <div>XYZ: ${base.x}, ${base.y}, ${base.z}</div>
-        ${nc ? `<div style="color:var(--text-muted);margin-top:2px;">Nether: ${nc.x}, 128, ${nc.z}</div>` : ''}
+
+      ${
+        imgSrc
+          ? `<div class="card-media" data-open-dossier="${escapeHtml(base.id)}" style="border:1px solid var(--border-subtle);">
+               <img src="${imgSrc}" alt="${escapeHtml(base.name)}" style="transform-origin:${escapeHtml(focusOrigin)};object-position:${escapeHtml(focusOrigin)};" />
+             </div>`
+          : ''
+      }
+
+      <div class="nether-callout">
+        <div style="color:var(--text-primary);font-weight:500;">XYZ: ${base.x}, ${base.y}, ${base.z}</div>
+        ${nc ? `<div style="margin-top:3px;color:var(--text-secondary);">Nether Roof (÷8): ${nc.x}, 128, ${nc.z}</div>` : `<div style="margin-top:3px;">Dimension: The End</div>`}
       </div>
-      <p style="font-size:13px;color:var(--text-secondary);">${escapeHtml(base.containers || base.notes || '')}</p>
-      <div style="display:flex;gap:8px;margin-top:auto;">
+
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.45;">
+        ${escapeHtml(base.containers || base.notes || 'No notes recorded.')}
+      </p>
+
+      <div style="display:flex;gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid var(--border-subtle);">
         <button type="button" class="btn-primary" style="flex:1;" data-copy-xaero="${escapeHtml(base.id)}">Copy Xaero</button>
-        <button type="button" class="btn-ghost" data-open-dossier="${escapeHtml(base.id)}">Edit</button>
+        <button type="button" class="btn-secondary" data-open-dossier="${escapeHtml(base.id)}">Inspect / Edit</button>
       </div>
     `;
+
     document.getElementById('map-card-close')?.addEventListener('click', () => {
       state.mapSelectedId = null;
       renderMapSelectedCard();
@@ -516,6 +605,17 @@
   // ============================================================================
   // DETAIL / EDIT MODAL
   // ============================================================================
+
+  function updateDossierNetherPreview() {
+    const dim = document.getElementById('edit-dimension').value;
+    const x = Number(document.getElementById('edit-x').value) || 0;
+    const y = Number(document.getElementById('edit-y').value) || 0;
+    const z = Number(document.getElementById('edit-z').value) || 0;
+    const nc = getNetherCoords({ dimension: dim, x, y, z });
+    document.getElementById('dossier-nether-readout').textContent = nc
+      ? `Nether Roof Portal (÷8): ${nc.x}, 128, ${nc.z}`
+      : 'Dimension: The End (No Nether Portal link)';
+  }
 
   function openDossier(baseId) {
     const base = state.bases.find(b => b.id === baseId);
@@ -539,11 +639,7 @@
     document.getElementById('edit-containers').value = base.containers || '';
     document.getElementById('edit-notes').value = base.notes || '';
 
-    const nc = getNetherCoords(base);
-    document.getElementById('dossier-nether-readout').textContent = nc
-      ? `Nether Roof (÷8): ${nc.x}, 128, ${nc.z}`
-      : 'Dimension: The End';
-
+    updateDossierNetherPreview();
     document.getElementById('dossier-modal').hidden = false;
   }
 
@@ -568,7 +664,8 @@
     state.pendingUploadFilename = '';
     document.getElementById('ingest-preview-img').hidden = true;
     document.getElementById('ingest-preview-empty').hidden = false;
-    document.getElementById('ocr-status-text').textContent = 'Optional — auto-fills name and coordinates';
+    document.getElementById('ocr-status-text').textContent =
+      'Optional — automatically reads player name and Block XYZ';
     document.getElementById('ingest-modal').hidden = false;
   }
 
@@ -667,11 +764,11 @@
   }
 
   function bindEvents() {
-    // View Switcher
-    document.querySelectorAll('.view-btn').forEach(btn => {
+    // Segmented View Switcher
+    document.querySelectorAll('.seg-item').forEach(btn => {
       btn.addEventListener('click', () => {
         state.activeView = btn.dataset.view;
-        document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('is-active', b === btn));
+        document.querySelectorAll('.seg-item').forEach(b => b.classList.toggle('is-active', b === btn));
         document.getElementById('view-grid').hidden = state.activeView !== 'grid';
         document.getElementById('view-table').hidden = state.activeView !== 'table';
         document.getElementById('view-map').hidden = state.activeView !== 'map';
@@ -679,26 +776,49 @@
       });
     });
 
-    // Status Filter Tabs
+    // Status Filter Pills
     document.getElementById('filter-status').addEventListener('click', e => {
-      const btn = e.target.closest('.status-tab');
+      const btn = e.target.closest('.filter-pill');
       if (!btn) return;
       state.filterStatus = btn.dataset.status;
-      document.querySelectorAll('.status-tab').forEach(b => b.classList.toggle('is-active', b === btn));
+      document.querySelectorAll('.filter-pill').forEach(b => b.classList.toggle('is-active', b === btn));
       renderAll();
     });
 
-    // Search
-    document.getElementById('search-input').addEventListener('input', e => {
+    // Table Column Sorting
+    document.querySelectorAll('.th-sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const field = th.dataset.sort;
+        if (state.sortField === field) {
+          state.sortAsc = !state.sortAsc;
+        } else {
+          state.sortField = field;
+          state.sortAsc = true;
+        }
+        renderAll();
+      });
+    });
+
+    // Search Input & "/" Keyboard Shortcut
+    const searchInput = document.getElementById('search-input');
+    const kbdHint = document.getElementById('search-kbd-hint');
+    searchInput.addEventListener('input', e => {
       state.searchQuery = e.target.value;
       renderAll();
     });
+    searchInput.addEventListener('focus', () => {
+      if (kbdHint) kbdHint.hidden = true;
+    });
+    searchInput.addEventListener('blur', () => {
+      if (kbdHint && !searchInput.value) kbdHint.hidden = false;
+    });
 
     // Copy All Xaero & Download .txt
-    document.getElementById('btn-export-xaero').addEventListener('click', () => {
+    const exportBtn = document.getElementById('btn-export-xaero');
+    exportBtn.addEventListener('click', () => {
       const activeBases = state.bases.filter(b => normalizeStatus(b.status) !== 'raided');
       const lines = activeBases.map(b => buildXaeroWaypoint(b).chatLine);
-      copyText(lines.join('\n'), `Copied ${lines.length} Xaero waypoints`);
+      copyText(lines.join('\n'), `Copied ${lines.length} active Xaero waypoints`, exportBtn, `✓ Copied (${lines.length})`);
     });
 
     document.getElementById('btn-download-xaero').addEventListener('click', () => {
@@ -718,7 +838,7 @@
       showToast('Downloaded mw$default_1.txt');
     });
 
-    // Delegated Actions
+    // Delegated Card & Table Actions
     document.body.addEventListener('click', async e => {
       const cycleBtn = e.target.closest('[data-cycle-status]');
       if (cycleBtn) {
@@ -736,7 +856,7 @@
       const copyEl = e.target.closest('[data-copy]');
       if (copyEl && copyEl.dataset.copy) {
         e.stopPropagation();
-        await copyText(copyEl.dataset.copy, `Copied ${copyEl.dataset.copy}`);
+        await copyText(copyEl.dataset.copy, `Copied ${copyEl.dataset.copy}`, copyEl, '✓ Copied');
         return;
       }
 
@@ -745,7 +865,12 @@
         e.stopPropagation();
         const base = state.bases.find(b => b.id === xaeroBtn.dataset.copyXaero);
         if (!base) return;
-        await copyText(buildXaeroWaypoint(base).chatLine, `Copied Xaero waypoint for ${base.name}`);
+        await copyText(
+          buildXaeroWaypoint(base).chatLine,
+          `Copied Xaero waypoint for ${base.name}`,
+          xaeroBtn,
+          '✓ Copied'
+        );
         return;
       }
 
@@ -761,7 +886,7 @@
     if (canvas) {
       const getTransform = () => {
         const rect = canvas.getBoundingClientRect();
-        const worldSpan = 22000 / state.radar.zoom;
+        const worldSpan = 25200 / state.radar.zoom;
         const pxPerBlock = Math.min(rect.width, rect.height) / worldSpan;
         return { rect, pxPerBlock };
       };
@@ -844,6 +969,11 @@
       if (e.target.id === 'dossier-modal') closeDossier();
     });
 
+    ['edit-x', 'edit-y', 'edit-z', 'edit-dimension'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', updateDossierNetherPreview);
+      document.getElementById(id)?.addEventListener('change', updateDossierNetherPreview);
+    });
+
     const viewport = document.getElementById('dossier-viewport');
     viewport.addEventListener(
       'wheel',
@@ -884,13 +1014,23 @@
     document.getElementById('dossier-prev').addEventListener('click', () => navigateDossier(-1));
     document.getElementById('dossier-next').addEventListener('click', () => navigateDossier(1));
 
-    document.getElementById('dossier-copy-xyz').addEventListener('click', () => {
+    const dossierXyzBtn = document.getElementById('dossier-copy-xyz');
+    dossierXyzBtn.addEventListener('click', () => {
       const b = state.bases.find(item => item.id === state.dossierBaseId);
-      if (b) copyText(`${b.x} ${b.y} ${b.z}`, `Copied ${b.x} ${b.y} ${b.z}`);
+      if (b) copyText(`${b.x} ${b.y} ${b.z}`, `Copied ${b.x} ${b.y} ${b.z}`, dossierXyzBtn, '✓ Copied XYZ');
     });
-    document.getElementById('dossier-copy-xaero').addEventListener('click', () => {
+
+    const dossierXaeroBtn = document.getElementById('dossier-copy-xaero');
+    dossierXaeroBtn.addEventListener('click', () => {
       const b = state.bases.find(item => item.id === state.dossierBaseId);
-      if (b) copyText(buildXaeroWaypoint(b).chatLine, `Copied Xaero waypoint for ${b.name}`);
+      if (b) {
+        copyText(
+          buildXaeroWaypoint(b).chatLine,
+          `Copied Xaero waypoint for ${b.name}`,
+          dossierXaeroBtn,
+          '✓ Waypoint Copied'
+        );
+      }
     });
 
     document.getElementById('dossier-form').addEventListener('submit', async e => {
@@ -976,16 +1116,24 @@
     });
 
     window.addEventListener('keydown', e => {
+      const tag = document.activeElement?.tagName;
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      if (e.key === '/' && !inInput && document.getElementById('dossier-modal').hidden && document.getElementById('ingest-modal').hidden) {
+        e.preventDefault();
+        searchInput.focus();
+        return;
+      }
+
       if (e.key === 'Escape') {
         if (!document.getElementById('dossier-modal').hidden) closeDossier();
         if (!document.getElementById('ingest-modal').hidden) closeIngestModal();
+        if (document.activeElement === searchInput) searchInput.blur();
       }
-      if (!document.getElementById('dossier-modal').hidden) {
-        const tag = document.activeElement?.tagName;
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-          if (e.key === 'ArrowLeft') navigateDossier(-1);
-          if (e.key === 'ArrowRight') navigateDossier(1);
-        }
+
+      if (!document.getElementById('dossier-modal').hidden && !inInput) {
+        if (e.key === 'ArrowLeft') navigateDossier(-1);
+        if (e.key === 'ArrowRight') navigateDossier(1);
       }
     });
 
