@@ -668,10 +668,10 @@
           >
             <div class="card-media" data-open-dossier="${escapeHtml(base.id)}">
               <div class="card-media-overlay">
-                <label class="card-select-chip" title="Select for bulk editing (Shift+Click for range)">
+                <div class="card-select-chip" data-select-chip="${escapeHtml(base.id)}" title="Select for bulk editing (Shift+Click for range)">
                   <input type="checkbox" data-select-id="${escapeHtml(base.id)}" ${isSelected ? 'checked' : ''} />
                   <span>Select</span>
-                </label>
+                </div>
 
                 <button
                   type="button"
@@ -2616,10 +2616,18 @@
         return;
       }
 
-      // Row Selection Checkbox (with Shift+Click range selection)
-      const selectCb = e.target.closest('input[data-select-id]');
-      if (selectCb) {
+      // Row / Card Selection Checkbox (with Shift+Click range selection)
+      const selectContainer = e.target.closest('[data-select-chip], input[data-select-id]');
+      if (selectContainer) {
         e.stopPropagation();
+        const isDirectInput = e.target.matches('input[data-select-id]');
+        const selectCb = isDirectInput
+          ? e.target
+          : selectContainer.querySelector('input[data-select-id]');
+        if (!selectCb) return;
+        if (!isDirectInput) {
+          selectCb.checked = !selectCb.checked;
+        }
         const id = selectCb.dataset.selectId;
         const filtered = getFilteredBases();
         if (e.shiftKey && state.lastSelectedId) {

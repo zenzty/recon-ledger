@@ -807,6 +807,8 @@ button {
 .card-select-chip,
 .card-route-chip {
   pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
   background-color: rgba(12, 14, 12, 0.86);
   border: 1px solid var(--border-default);
   padding: 4px 8px;
