@@ -893,9 +893,9 @@
               }
             </td>
 
-            <td class="num" style="color:var(--text-secondary);" ${!state.tableColumns.vector ? 'hidden' : ''}>
+            <td class="num" style="color:var(--text-secondary);" ${!state.tableColumns.vector ? 'hidden' : ''} title="${dist.nether !== null ? `Nether distance: ${formatNumber(dist.nether)}m` : 'The End'}">
               <span>${formatNumber(dist.ow)}m</span>
-              <span style="color:var(--text-muted);margin-left:4px;">(${dist.nether !== null ? `${formatNumber(dist.nether)}m N` : 'End'} · ${bearing.cardinal} ${bearing.yawStr})</span>
+              <span style="color:var(--text-muted);margin-left:4px;">· ${bearing.cardinal} ${bearing.yawStr}</span>
             </td>
 
             <td class="mono" style="color:var(--text-secondary);font-size:11.5px;" ${!state.tableColumns.meta ? 'hidden' : ''}>

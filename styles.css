@@ -80,6 +80,29 @@ button {
   outline-offset: 1px;
 }
 
+/* Native Dark Mode Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-surface-3) var(--bg-recessed);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-recessed);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface-3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #383d38;
+}
+
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -1089,13 +1112,13 @@ button {
 .bases-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12.5px;
   outline: none;
 }
 
 .bases-table th,
 .bases-table td {
-  padding: 11px 14px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   white-space: nowrap;
@@ -1103,8 +1126,8 @@ button {
 
 .bases-table.is-compact th,
 .bases-table.is-compact td {
-  padding: 7px 12px;
-  font-size: 12.5px;
+  padding: 6px 9px;
+  font-size: 12px;
 }
 
 .bases-table th {
@@ -1196,7 +1219,7 @@ button {
 .editable-cell {
   cursor: text;
   position: relative;
-  max-width: 280px;
+  max-width: 190px;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-secondary);
@@ -1209,7 +1232,7 @@ button {
 
 .inline-edit-input {
   width: 100%;
-  min-width: 180px;
+  min-width: 160px;
   background-color: var(--bg-canvas);
   border: 1px solid var(--accent-priority);
   color: var(--text-primary);
@@ -1220,14 +1243,14 @@ button {
 
 /* Table Side Preview Pane */
 .table-preview-pane {
-  width: 330px;
+  width: 300px;
   flex-shrink: 0;
   background-color: var(--bg-surface-1);
   border: 1px solid var(--border-subtle);
-  padding: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   position: sticky;
   top: 20px;
 }
