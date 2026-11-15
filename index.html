@@ -16,7 +16,7 @@
       <div class="header-brand">
         <h1 class="site-title">Bases</h1>
         <span class="site-divider">/</span>
-        <span class="site-subtitle" id="header-summary">17 cataloged · 9 priority</span>
+        <span class="site-subtitle" id="header-summary">0 cataloged · 0 priority · 0 scouted</span>
         <button type="button" class="origin-pill" id="active-origin-pill" title="Active vector origin for distance and F3 yaw calculations">
           Origin: Spawn (0, 0)
         </button>
@@ -165,17 +165,17 @@
         <div class="filter-pills" id="filter-status" role="tablist" aria-label="Filter by status">
           <button type="button" class="filter-pill is-active" data-status="all" role="tab" aria-selected="true">
             <span>All</span>
-            <span class="pill-count" id="count-all">17</span>
+            <span class="pill-count" id="count-all">0</span>
           </button>
           <button type="button" class="filter-pill" data-status="priority" role="tab" aria-selected="false">
             <span class="status-dot dot-priority"></span>
             <span>Priority</span>
-            <span class="pill-count" id="count-priority">9</span>
+            <span class="pill-count" id="count-priority">0</span>
           </button>
           <button type="button" class="filter-pill" data-status="scouted" role="tab" aria-selected="false">
             <span class="status-dot dot-scouted"></span>
             <span>Scouted</span>
-            <span class="pill-count" id="count-scouted">8</span>
+            <span class="pill-count" id="count-scouted">0</span>
           </button>
           <button type="button" class="filter-pill" data-status="compromised" role="tab" aria-selected="false">
             <span class="status-dot dot-compromised"></span>
@@ -705,6 +705,15 @@
         <!-- Computed Nether Roof, Distance & F3 Yaw Strip -->
         <div class="computed-telemetry-grid" id="dossier-computed-strip"></div>
 
+        <!-- Edit Modal Proximity / Overlap Check -->
+        <div id="edit-duplicate-warning-box" class="dup-warning-box" role="region" aria-label="Nearby base warning" hidden>
+          <div class="dup-warning-header">
+            <span class="dup-warning-badge">PROXIMITY NOTICE</span>
+            <span class="dup-warning-summary" id="edit-dup-summary">Another base exists nearby</span>
+          </div>
+          <div class="dup-matches-list" id="edit-duplicate-matches-list"></div>
+        </div>
+
         <!-- Quick Coordinate Copy & Seed Map Actions -->
         <div style="display:flex;flex-wrap:wrap;gap:6px;">
           <button type="button" class="btn-secondary btn-sm" id="dossier-copy-xyz">Copy XYZ</button>
@@ -726,7 +735,7 @@
     </div>
   </div>
 
-  <!-- ADD BASE MODAL (Focused on Owner & Coordinates) -->
+  <!-- ADD BASE MODAL (Focused on Owner & Coordinates + Intelligent Duplicate Detection) -->
   <div id="ingest-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="ingest-heading">
     <div class="modal-dialog modal-narrow">
       <header class="modal-topbar">
@@ -766,22 +775,62 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="new-dimension">Dimension</label>
-          <select id="new-dimension" class="form-select">
-            <option value="overworld">Overworld</option>
-            <option value="the_end">The End</option>
-            <option value="the_nether">Nether</option>
-          </select>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="new-dimension">Dimension</label>
+            <select id="new-dimension" class="form-select">
+              <option value="overworld">Overworld</option>
+              <option value="the_end">The End</option>
+              <option value="the_nether">Nether</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-dup-radius" title="Adjust proximity detection radius to match expected base footprint">Base Footprint / Proximity Check</label>
+            <select id="new-dup-radius" class="form-select">
+              <option value="160" selected>Adaptive (Auto · 160m + 500m Owner)</option>
+              <option value="64">Compact / Stash (≤ 64m)</option>
+              <option value="320">Large / Mega-Base (≤ 320m)</option>
+              <option value="500">Wide Perimeter / Farm Complex (≤ 500m)</option>
+            </select>
+          </div>
         </div>
 
         <div class="nether-callout mono" id="new-nether-preview">
           Nether Roof (÷8): Enter X and Z above
         </div>
 
+        <!-- INTELLIGENT DUPLICATE & PROXIMITY DETECTION WARNING PANEL -->
+        <div
+          id="duplicate-warning-box"
+          class="dup-warning-box"
+          role="alert"
+          aria-live="polite"
+          hidden
+        >
+          <div class="dup-warning-header">
+            <span class="dup-warning-badge" id="dup-warning-badge">POTENTIAL DUPLICATE DETECTED</span>
+            <span class="dup-warning-summary" id="dup-warning-summary">1 nearby or matching base found</span>
+          </div>
+          <p class="dup-warning-intro" id="dup-warning-intro">
+            Compare the existing base record(s) below. Separate bases can exist near each other — choose whether to update the existing base or confirm saving this as a separate base.
+          </p>
+          <div class="dup-matches-list" id="duplicate-matches-list"></div>
+          <div class="dup-confirm-footer" id="dup-confirm-footer">
+            <label class="facet-check dup-confirm-check-label">
+              <input type="checkbox" id="dup-manual-confirm-cb" />
+              <span>I verified this is a separate base — allow saving alongside the existing entry</span>
+            </label>
+          </div>
+        </div>
+
         <div class="form-actions-bar">
           <button type="button" class="btn-secondary" id="ingest-cancel">Cancel</button>
-          <button type="submit" class="btn-primary">Add Base</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button type="button" class="btn-warning" id="btn-ingest-save-anyway" hidden>
+              Save Anyway as Separate Base
+            </button>
+            <button type="submit" class="btn-primary" id="btn-ingest-submit">Add Base</button>
+          </div>
         </div>
       </form>
     </div>

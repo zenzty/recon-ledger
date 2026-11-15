@@ -139,7 +139,7 @@
     const sortSel = document.getElementById('sort-select');
     if (sortSel) sortSel.value = state.sortBy;
     const sortDirBtn = document.getElementById('btn-sort-dir');
-    if (sortDirBtn) sortDirBtn.textContent = state.sortDir === 1 ? '↑ ASC' : '↓ DESC';
+    if (sortDirBtn) sortDirBtn.textContent = state.sortDir === 1 ? 'â†‘ ASC' : 'â†“ DESC';
 
     const vecCb = document.getElementById('toggle-card-vectors');
     if (vecCb) vecCb.checked = state.showCardVectors;
@@ -191,17 +191,17 @@
   }
 
   /**
-   * Computes Minecraft's exact F3 Rotation Yaw (-180° to +180°) and compass octant.
-   * In Minecraft: +Z = South (0°), -X = West (+90°), -Z = North (±180°), +X = East (-90°)
+   * Computes Minecraft's exact F3 Rotation Yaw (-180Â° to +180Â°) and compass octant.
+   * In Minecraft: +Z = South (0Â°), -X = West (+90Â°), -Z = North (Â±180Â°), +X = East (-90Â°)
    */
   function getBearing(fromX, fromZ, toX, toZ) {
     const dx = toX - fromX;
     const dz = toZ - fromZ;
     if (dx === 0 && dz === 0) {
-      return { yaw: 0, yawStr: '0.0°', cardinal: 'ORIGIN' };
+      return { yaw: 0, yawStr: '0.0Â°', cardinal: 'ORIGIN' };
     }
     const yaw = Math.atan2(-dx, dz) * (180 / Math.PI);
-    const yawStr = (yaw >= 0 ? '+' : '') + yaw.toFixed(1) + '°';
+    const yawStr = (yaw >= 0 ? '+' : '') + yaw.toFixed(1) + 'Â°';
     const compassDeg = (Math.atan2(dx, -dz) * (180 / Math.PI) + 360) % 360;
     const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
     const cardinal = dirs[Math.round(compassDeg / 45) % 8];
@@ -322,7 +322,7 @@
     return false;
   }
 
-  function flashInlineCopied(el, tempText = '✓ Copied') {
+  function flashInlineCopied(el, tempText = 'âś“ Copied') {
     if (!el) return;
     if (!el.dataset.origText) {
       el.dataset.origText = el.textContent;
@@ -338,7 +338,7 @@
     }, 1350);
   }
 
-  async function copyText(text, label = 'Copied to clipboard', triggerEl = null, inlineLabel = '✓ Copied') {
+  async function copyText(text, label = 'Copied to clipboard', triggerEl = null, inlineLabel = 'âś“ Copied') {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -495,6 +495,233 @@
     showToast(`Restored ${deletedBases.length} base(s)`);
   }
 
+  function normalizeOwnerTokens(name) {
+    const clean = String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, ' ')
+      .trim();
+    const tokens = clean
+      .split(/\s+/)
+      .map(t => t.replace(/_\d+$/, ''))
+      .filter(t => t.length >= 3 && !['base', 'farm', 'stash', 'sanctuary', 'outpost', 'end', 'nether'].includes(t));
+    return { clean, tokens };
+  }
+
+  function getOwnerRelation(nameA, nameB) {
+    const a = normalizeOwnerTokens(nameA);
+    const b = normalizeOwnerTokens(nameB);
+    if (!a.clean || !b.clean) return 'different';
+    if (a.clean === b.clean) return 'exact';
+    if (a.clean.length >= 3 && b.clean.length >= 3 && (a.clean.includes(b.clean) || b.clean.includes(a.clean))) {
+      return 'partial';
+    }
+    for (const ta of a.tokens) {
+      for (const tb of b.tokens) {
+        if (ta === tb || (ta.length >= 4 && tb.length >= 4 && (ta.includes(tb) || tb.includes(ta)))) {
+          return 'partial';
+        }
+      }
+    }
+    return 'different';
+  }
+
+  function findPotentialDuplicates(candidate, existingBases, customRadius = null) {
+    const hasCoords =
+      candidate.x !== '' &&
+      candidate.z !== '' &&
+      candidate.x !== null &&
+      candidate.z !== null &&
+      !Number.isNaN(Number(candidate.x)) &&
+      !Number.isNaN(Number(candidate.z));
+
+    const candX = Math.round(Number(candidate.x) || 0);
+    const candY = Math.round(Number(candidate.y) ?? 64);
+    const candZ = Math.round(Number(candidate.z) || 0);
+    const candDim = ['overworld', 'the_end', 'the_nether'].includes(candidate.dimension)
+      ? candidate.dimension
+      : 'overworld';
+    const candName = String(candidate.name || '').trim();
+
+    const baseRadius = Number(customRadius) > 0 ? Number(customRadius) : 160;
+    const matches = [];
+
+    for (const existing of existingBases) {
+      if (candidate.excludeId && existing.id === candidate.excludeId) continue;
+      const exDim = existing.dimension || 'overworld';
+      const ownerRel = getOwnerRelation(candName, existing.name);
+
+      if (!hasCoords) {
+        if (ownerRel === 'exact') {
+          matches.push({
+            base: existing,
+            kind: 'SAME_OWNER_NAME',
+            severity: 'medium',
+            label: 'Existing Base With Same Owner',
+            dist2D: null,
+            dist3D: null,
+            dx: 0,
+            dy: 0,
+            dz: 0,
+            boxSpan: 0,
+            chunkDist: 0,
+            ownerRel,
+            reason: `Owner "${existing.name}" already has a base recorded at ${existing.x}, ${existing.y}, ${existing.z}. Enter coordinates to compare proximity.`
+          });
+        }
+        continue;
+      }
+
+      const dx = Math.abs(candX - existing.x);
+      const dy = Math.abs(candY - existing.y);
+      const dz = Math.abs(candZ - existing.z);
+      const dist2D = Math.round(Math.hypot(dx, dz));
+      const dist3D = Math.round(Math.hypot(dx, dy, dz));
+      const boxSpan = Math.max(dx, dz);
+      const chunkDist = Math.max(
+        Math.abs((candX >> 4) - (existing.x >> 4)),
+        Math.abs((candZ >> 4) - (existing.z >> 4))
+      );
+
+      if (candDim === exDim) {
+        const effectiveRadius =
+          ownerRel === 'exact'
+            ? Math.max(baseRadius, 500)
+            : ownerRel === 'partial'
+              ? Math.max(baseRadius, 360)
+              : baseRadius;
+
+        if (dist2D <= 4) {
+          matches.push({
+            base: existing,
+            kind: 'EXACT_COORDS',
+            severity: 'high',
+            label: 'Exact / Near-Identical Coordinates',
+            dist2D,
+            dist3D,
+            dx,
+            dy,
+            dz,
+            boxSpan,
+            chunkDist,
+            ownerRel,
+            reason: `Coordinates are ${dist2D === 0 ? 'identical' : `within ${dist2D} blocks`} (Î”X: ${dx}, Î”Y: ${dy}, Î”Z: ${dz}).`
+          });
+          continue;
+        }
+
+        if (dist2D <= 36 && dy >= 24) {
+          matches.push({
+            base: existing,
+            kind: 'VERTICAL_STACK',
+            severity: 'high',
+            label: 'Same Column (Surface / Underground Stack)',
+            dist2D,
+            dist3D,
+            dx,
+            dy,
+            dz,
+            boxSpan,
+            chunkDist,
+            ownerRel,
+            reason: `Only ${dist2D} blocks apart horizontally (${chunkDist} chunk${chunkDist === 1 ? '' : 's'}), separated vertically by ${dy} blocks (Y=${candY} vs Y=${existing.y}).`
+          });
+          continue;
+        }
+
+        if (dist2D <= 48 || boxSpan <= 40) {
+          matches.push({
+            base: existing,
+            kind: 'CORE_FOOTPRINT',
+            severity: 'high',
+            label: 'Inside Core Base Footprint',
+            dist2D,
+            dist3D,
+            dx,
+            dy,
+            dz,
+            boxSpan,
+            chunkDist,
+            ownerRel,
+            reason: `${dist2D} blocks away (${chunkDist} chunk${chunkDist === 1 ? '' : 's'}) â€” within the typical footprint of a single base structure.`
+          });
+          continue;
+        }
+
+        if (dist2D <= effectiveRadius || boxSpan <= effectiveRadius) {
+          const isSameOwner = ownerRel !== 'different';
+          matches.push({
+            base: existing,
+            kind: isSameOwner ? 'SAME_OWNER_COMPOUND' : 'COMPOUND_PROXIMITY',
+            severity: isSameOwner || dist2D <= 96 ? 'high' : 'medium',
+            label: isSameOwner ? 'Same Owner / Compound Footprint' : 'Nearby Base / Large Compound Footprint',
+            dist2D,
+            dist3D,
+            dx,
+            dy,
+            dz,
+            boxSpan,
+            chunkDist,
+            ownerRel,
+            reason: isSameOwner
+              ? `Matching owner (${existing.name}) ${dist2D} blocks away (${chunkDist} chunks) â€” likely part of the same compound or an updated coordinate reading.`
+              : `${dist2D} blocks away (Î”X: ${dx}, Î”Z: ${dz} Â· ${chunkDist} chunks) â€” within medium/large base perimeter.`
+          });
+          continue;
+        }
+
+        // Sign-flip typo check (e.g. -3914 vs +3914)
+        const absDiff = Math.round(
+          Math.hypot(Math.abs(candX) - Math.abs(existing.x), Math.abs(candZ) - Math.abs(existing.z))
+        );
+        if (absDiff <= 24 && (Math.abs(candX) > 100 || Math.abs(candZ) > 100)) {
+          matches.push({
+            base: existing,
+            kind: 'SIGN_TYPO',
+            severity: ownerRel !== 'different' ? 'high' : 'medium',
+            label: 'Possible +/- Coordinate Sign Typo',
+            dist2D,
+            dist3D,
+            dx,
+            dy,
+            dz,
+            boxSpan,
+            chunkDist,
+            ownerRel,
+            reason: `Absolute coordinates |X|, |Z| match ${existing.name} (${existing.x}, ${existing.y}, ${existing.z}) within ${absDiff} blocks, but with an inverted +/- sign.`
+          });
+          continue;
+        }
+      }
+
+      // Cross-dimension / 1:8 Nether Roof portal coordinate match
+      if (exDim === 'overworld' && candDim !== 'the_end') {
+        const exNetherX = Math.floor(existing.x / 8);
+        const exNetherZ = Math.floor(existing.z / 8);
+        const netherDiff = Math.round(Math.hypot(candX - exNetherX, candZ - exNetherZ));
+        if (netherDiff <= 16 && Math.hypot(existing.x, existing.z) > 200) {
+          matches.push({
+            base: existing,
+            kind: 'NETHER_PORTAL_MATCH',
+            severity: 'high',
+            label: 'Matches 1:8 Nether Roof Portal Coords',
+            dist2D: netherDiff,
+            dist3D: netherDiff,
+            dx: Math.abs(candX - exNetherX),
+            dy,
+            dz: Math.abs(candZ - exNetherZ),
+            boxSpan: Math.max(Math.abs(candX - exNetherX), Math.abs(candZ - exNetherZ)),
+            chunkDist: Math.ceil(netherDiff / 16),
+            ownerRel,
+            reason: `Entered coordinates (${candX}, ${candZ}) are within ${netherDiff} blocks of ${existing.name}'s Nether Roof portal (${exNetherX}, 128, ${exNetherZ}).`
+          });
+        }
+      }
+    }
+
+    matches.sort((a, b) => (a.dist2D ?? 999999) - (b.dist2D ?? 999999));
+    return matches;
+  }
+
   async function createBase(payload) {
     try {
       const res = await fetch(`${state.apiBase}/api/bases`, {
@@ -502,6 +729,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      if (res.status === 409) {
+        return { duplicateWarning: true };
+      }
       if (!res.ok) throw new Error();
       const data = await res.json();
       state.bases = data.bases;
@@ -509,8 +739,21 @@
       renderAll();
       return data.base;
     } catch {
-      showToast('Failed to add base');
-      return null;
+      const newEntry = {
+        id: `${String(payload.name || 'base').toLowerCase().replace(/[^a-z0-9_]+/g, '_')}_${Date.now().toString(36).slice(-4)}`,
+        plate: String(state.bases.length + 1).padStart(2, '0'),
+        name: String(payload.name || 'Unnamed Base').trim(),
+        x: Math.round(Number(payload.x) || 0),
+        y: Math.round(Number(payload.y) ?? 64),
+        z: Math.round(Number(payload.z) || 0),
+        dimension: payload.dimension || 'overworld',
+        status: payload.status || 'scouted',
+        xaeroColor: 12
+      };
+      state.bases.push(newEntry);
+      populateOriginSelect();
+      renderAll();
+      return newEntry;
     }
   }
 
@@ -603,7 +846,7 @@
       `<option value="0,0">World Spawn (0, 0)</option>`,
       ...state.bases
         .filter(b => b.dimension !== 'the_end')
-        .map(b => `<option value="${b.x},${b.z}">${escapeHtml(b.plate)} · ${escapeHtml(b.name)} (${b.x}, ${b.z})</option>`)
+        .map(b => `<option value="${b.x},${b.z}">${escapeHtml(b.plate)} Â· ${escapeHtml(b.name)} (${b.x}, ${b.z})</option>`)
     ];
     sel.innerHTML = options.join('');
     if ([...sel.options].some(o => o.value === currentVal)) {
@@ -620,7 +863,7 @@
 
     const parts = [`${total} cataloged`, `${priority} priority`, `${scouted} scouted`];
     if (raided > 0) parts.push(`${raided} raided`);
-    document.getElementById('header-summary').textContent = parts.join(' · ');
+    document.getElementById('header-summary').textContent = parts.join(' Â· ');
 
     document.getElementById('active-origin-pill').textContent = `Origin: ${state.origin.label}`;
 
@@ -643,7 +886,7 @@
 
     // Coordinate mode indicator
     document.getElementById('coord-mode-indicator').textContent =
-      state.globalCoordMode === 'nether' ? 'Mode: Nether ÷8' : 'Nether ÷8';
+      state.globalCoordMode === 'nether' ? 'Mode: Nether Ă·8' : 'Nether Ă·8';
 
     renderActiveFacetChips();
     renderBulkActionBar();
@@ -657,12 +900,12 @@
     state.filters.dimensions.forEach(d => {
       const label = d === 'the_end' ? 'The End' : d === 'the_nether' ? 'Nether' : 'Overworld';
       chips.push(
-        `<span class="filter-chip">Dim: ${label} <button type="button" data-remove-facet="dim:${d}" aria-label="Remove dimension filter">×</button></span>`
+        `<span class="filter-chip">Dim: ${label} <button type="button" data-remove-facet="dim:${d}" aria-label="Remove dimension filter">Ă—</button></span>`
       );
     });
     if (state.filters.routeOnly) {
       chips.push(
-        `<span class="filter-chip">In Route (${state.routeIds.length}) <button type="button" data-remove-facet="route" aria-label="Remove route filter">×</button></span>`
+        `<span class="filter-chip">In Route (${state.routeIds.length}) <button type="button" data-remove-facet="route" aria-label="Remove route filter">Ă—</button></span>`
       );
     }
 
@@ -700,7 +943,7 @@
         chip.classList.toggle('is-checked', selected);
         chip.setAttribute('aria-pressed', String(selected));
         const box = chip.querySelector('.select-box-icon');
-        if (box) box.textContent = selected ? '✓' : '';
+        if (box) box.textContent = selected ? 'âś“' : '';
       }
     });
 
@@ -766,12 +1009,24 @@
     const grid = document.getElementById('bases-grid');
 
     if (filtered.length === 0) {
-      grid.innerHTML = `
-        <div style="grid-column:1/-1;padding:64px 0;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;gap:12px;">
-          <div>No bases match the current filters.</div>
-          <button type="button" class="btn-secondary btn-sm" data-reset-all-filters>Reset All Filters</button>
-        </div>
-      `;
+      if (state.bases.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column:1/-1;padding:72px 20px;text-align:center;color:var(--text-secondary);background:var(--bg-surface-1);border:1px dashed var(--border-default);display:flex;flex-direction:column;align-items:center;gap:12px;">
+            <strong style="font-size:15px;color:var(--text-primary);">Database is empty â€” ready for manual base entries</strong>
+            <div style="font-size:12.5px;color:var(--text-muted);max-width:440px;line-height:1.5;">
+              Add bases by owner and coordinates. Intelligent duplicate &amp; proximity detection will automatically check for overlapping or nearby entries before saving.
+            </div>
+            <button type="button" class="btn-primary" data-open-ingest>+ Add First Base</button>
+          </div>
+        `;
+      } else {
+        grid.innerHTML = `
+          <div style="grid-column:1/-1;padding:64px 0;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;gap:12px;">
+            <div>No bases match the current filters.</div>
+            <button type="button" class="btn-secondary btn-sm" data-reset-all-filters>Reset All Filters</button>
+          </div>
+        `;
+      }
       return;
     }
 
@@ -806,7 +1061,7 @@
 
         const netherCellHtml = `
           <div class="card-coord-cell">
-            <span class="card-coord-label">NETHER ROOF (÷8)</span>
+            <span class="card-coord-label">NETHER ROOF (Ă·8)</span>
             ${
               nc
                 ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof portal coordinates (${escapeHtml(netherCopy)})">
@@ -838,7 +1093,7 @@
                     aria-label="Select ${escapeHtml(base.name)}"
                     title="Select for bulk editing (Shift+Click for range)"
                   >
-                    <span class="select-box-icon" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+                    <span class="select-box-icon" aria-hidden="true">${isSelected ? 'âś“' : ''}</span>
                   </button>
                   <span class="card-plate-idx">#${escapeHtml(base.plate || '01')}</span>
                   <h2 class="card-title" data-open-dossier="${escapeHtml(base.id)}" title="Click to edit ${escapeHtml(base.name)}">${escapeHtml(base.name)}</h2>
@@ -870,7 +1125,7 @@
                     data-open-ctx="${escapeHtml(base.id)}"
                     aria-label="More actions for ${escapeHtml(base.name)}"
                     title="More actions (Right-click anywhere on card)"
-                  >⋯</button>
+                  >â‹Ż</button>
                 </div>
               </div>
 
@@ -882,7 +1137,7 @@
                 ${
                   state.showCardVectors
                     ? `<div class="card-vector-line" title="Distance and F3 heading yaw from active Origin">
-                         Δ ${formatNumber(dist.ow)}m${dist.nether !== null ? ` (${formatNumber(dist.nether)}m N)` : ''} · ${bearing.cardinal} ${bearing.yawStr}
+                         Î” ${formatNumber(dist.ow)}m${dist.nether !== null ? ` (${formatNumber(dist.nether)}m N)` : ''} Â· ${bearing.cardinal} ${bearing.yawStr}
                        </div>`
                     : `<div></div>`
                 }
@@ -946,13 +1201,17 @@
     document.querySelectorAll('#bases-table thead th.th-sortable').forEach(th => {
       const isSorted = th.dataset.sort === state.sortBy;
       th.classList.toggle('is-sorted', isSorted);
-      const baseLabel = th.dataset.baseLabel || th.textContent.replace(/\s*[↑↓]$/, '');
+      const baseLabel = th.dataset.baseLabel || th.textContent.replace(/\s*[â†‘â†“]$/, '');
       th.dataset.baseLabel = baseLabel;
-      th.textContent = isSorted ? `${baseLabel} ${state.sortDir === 1 ? '↑' : '↓'}` : baseLabel;
+      th.textContent = isSorted ? `${baseLabel} ${state.sortDir === 1 ? 'â†‘' : 'â†“'}` : baseLabel;
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="padding:48px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><span>No matching bases found.</span><button type="button" class="btn-secondary btn-xs" data-reset-all-filters>Reset All Filters</button></div></td></tr>`;
+      if (state.bases.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="padding:56px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><strong style="color:var(--text-primary);">Database is empty â€” ready for manual base entries</strong><button type="button" class="btn-primary btn-sm" data-open-ingest>+ Add First Base</button></div></td></tr>`;
+      } else {
+        tbody.innerHTML = `<tr><td colspan="8" style="padding:48px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><span>No matching bases found.</span><button type="button" class="btn-secondary btn-xs" data-reset-all-filters>Reset All Filters</button></div></td></tr>`;
+      }
       return;
     }
 
@@ -984,7 +1243,7 @@
             </td>
 
             <td class="mono" style="color:var(--text-muted);" ${!state.tableColumns.plate ? 'hidden' : ''}>
-              ${escapeHtml(base.plate || '—')}
+              ${escapeHtml(base.plate || 'â€”')}
             </td>
 
             <td data-name-cell="${escapeHtml(base.id)}">
@@ -999,7 +1258,7 @@
                   data-inline-rename="${escapeHtml(base.id)}"
                   aria-label="Rename ${escapeHtml(base.name)} inline"
                   title="Rename owner inline (F2)"
-                >✎</button>
+                >âśŽ</button>
                 ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
                 ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
                 ${routeIdx !== -1 ? `<span class="route-step-pill">#0${routeIdx + 1}</span>` : ''}
@@ -1027,14 +1286,14 @@
             <td class="num" ${!state.tableColumns.nether ? 'hidden' : ''}>
               ${
                 nc
-                  ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof XYZ (X÷8, 128, Z÷8)">${nc.x}, 128, ${nc.z}</span>`
-                  : `<span style="color:var(--text-muted);">—</span>`
+                  ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof XYZ (XĂ·8, 128, ZĂ·8)">${nc.x}, 128, ${nc.z}</span>`
+                  : `<span style="color:var(--text-muted);">â€”</span>`
               }
             </td>
 
             <td class="num" style="color:var(--text-secondary);" ${!state.tableColumns.vector ? 'hidden' : ''} title="${dist.nether !== null ? `Nether distance: ${formatNumber(dist.nether)}m` : 'The End'}">
               <span>${formatNumber(dist.ow)}m</span>
-              <span style="color:var(--text-muted);margin-left:4px;">· ${bearing.cardinal} ${bearing.yawStr}</span>
+              <span style="color:var(--text-muted);margin-left:4px;">Â· ${bearing.cardinal} ${bearing.yawStr}</span>
             </td>
 
             <td class="num">
@@ -1058,7 +1317,7 @@
                   class="btn-row-menu"
                   data-open-ctx="${escapeHtml(base.id)}"
                   aria-label="More actions"
-                >⋯</button>
+                >â‹Ż</button>
               </div>
             </td>
           </tr>
@@ -1151,7 +1410,7 @@
     ctx.lineTo(W, toScreenY(0));
     ctx.stroke();
 
-    // 4. ±10,000 World Border
+    // 4. Â±10,000 World Border
     const wbL = toScreenX(-10000);
     const wbR = toScreenX(10000);
     const wbT = toScreenY(-10000);
@@ -1298,7 +1557,9 @@
   function renderMapSidebar() {
     const card = document.getElementById('map-selected-card');
     const base = state.bases.find(b => b.id === state.mapSelectedId) || state.bases[0];
-    if (base) {
+    if (!base) {
+      card.innerHTML = `<div style="color:var(--text-muted);font-size:12px;">Database is empty â€” click <strong>+ Add Base</strong> to record a base.</div>`;
+    } else if (base) {
       const st = normalizeStatus(base.status);
       const stLabel = STATUS_LABELS[st] || 'Scouted';
       const nc = getNetherCoords(base);
@@ -1319,8 +1580,8 @@
 
         <div class="nether-callout mono" style="font-size:11.5px;">
           <div style="color:var(--text-primary);">OW: <span class="coord-xyz" data-copy="${base.x} ${base.y} ${base.z}">${base.x}, ${base.y}, ${base.z}</span></div>
-          ${nc ? `<div>Nether (÷8): <span class="coord-nether" data-copy="${nc.x} 128 ${nc.z}">${nc.x}, 128, ${nc.z}</span></div>` : `<div>Dimension: The End</div>`}
-          <div style="color:var(--text-secondary);margin-top:2px;">Δ ${formatNumber(dist.ow)}m · Yaw ${bearing.cardinal} ${bearing.yawStr}</div>
+          ${nc ? `<div>Nether (Ă·8): <span class="coord-nether" data-copy="${nc.x} 128 ${nc.z}">${nc.x}, 128, ${nc.z}</span></div>` : `<div>Dimension: The End</div>`}
+          <div style="color:var(--text-secondary);margin-top:2px;">Î” ${formatNumber(dist.ow)}m Â· Yaw ${bearing.cardinal} ${bearing.yawStr}</div>
         </div>
 
         <div style="display:flex;gap:6px;">
@@ -1349,9 +1610,9 @@
               <div class="route-leg-card">
                 <div class="route-leg-top">
                   <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text-primary);">
-                    #0${idx + 1} · ${escapeHtml(b.name)}
+                    #0${idx + 1} Â· ${escapeHtml(b.name)}
                   </span>
-                  <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">×</button>
+                  <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">Ă—</button>
                 </div>
                 <div class="route-leg-meta">
                   <span>End Gateway</span>
@@ -1369,12 +1630,12 @@
             <div class="route-leg-card">
               <div class="route-leg-top">
                 <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text-primary);">
-                  #0${idx + 1} · ${escapeHtml(b.name)}
+                  #0${idx + 1} Â· ${escapeHtml(b.name)}
                 </span>
-                <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">×</button>
+                <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">Ă—</button>
               </div>
               <div class="route-leg-meta">
-                <span>Δ ${formatNumber(legN)}m N (${formatNumber(legOw)}m)</span>
+                <span>Î” ${formatNumber(legN)}m N (${formatNumber(legOw)}m)</span>
                 <span>${bearing.cardinal} ${bearing.yawStr}</span>
               </div>
             </div>
@@ -1418,10 +1679,10 @@
               <strong style="cursor:pointer;" data-open-dossier="${escapeHtml(base.id)}">${escapeHtml(base.name)}</strong>
             </div>
             <div style="display:flex;gap:4px;">
-              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:-1" ${idx === 0 ? 'disabled' : ''} title="Move Up">↑</button>
-              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:1" ${idx === stops.length - 1 ? 'disabled' : ''} title="Move Down">↓</button>
+              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:-1" ${idx === 0 ? 'disabled' : ''} title="Move Up">â†‘</button>
+              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:1" ${idx === stops.length - 1 ? 'disabled' : ''} title="Move Down">â†“</button>
               <button type="button" class="btn-secondary btn-xs" data-copy-xaero="${escapeHtml(base.id)}">Xaero</button>
-              <button type="button" class="btn-secondary btn-xs" data-toggle-route="${escapeHtml(base.id)}" title="Remove stop">×</button>
+              <button type="button" class="btn-secondary btn-xs" data-toggle-route="${escapeHtml(base.id)}" title="Remove stop">Ă—</button>
             </div>
           </div>
           <div class="route-leg-meta">
@@ -1433,7 +1694,7 @@
             }
           </div>
           <div class="route-leg-meta" style="color:var(--text-muted);">
-            <span>${isEnd ? 'End Gateway (Stronghold Portal)' : `Leg Δ: ${formatNumber(legOw)}m OW (${formatNumber(legNether)}m N)`}</span>
+            <span>${isEnd ? 'End Gateway (Stronghold Portal)' : `Leg Î”: ${formatNumber(legOw)}m OW (${formatNumber(legNether)}m N)`}</span>
             <span>${isEnd ? 'Dimension: End' : `F3 Yaw: ${bearing.cardinal} ${bearing.yawStr}`}</span>
           </div>
         </div>
@@ -1551,8 +1812,8 @@
           .map(
             ({ base, wp }) => `
             <div class="xaero-manual-row">
-              <strong style="min-width:130px;">${escapeHtml(base.plate || '')} · ${escapeHtml(base.name)}</strong>
-              <span class="xaero-manual-string" title="${escapeHtml(wp.fileLine)}">XYZ: ${wp.x}, ${wp.y}, ${wp.z} · ${escapeHtml(wp.fileLine)}</span>
+              <strong style="min-width:130px;">${escapeHtml(base.plate || '')} Â· ${escapeHtml(base.name)}</strong>
+              <span class="xaero-manual-string" title="${escapeHtml(wp.fileLine)}">XYZ: ${wp.x}, ${wp.y}, ${wp.z} Â· ${escapeHtml(wp.fileLine)}</span>
               <div style="display:flex;gap:6px;flex-shrink:0;">
                 <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(wp.coordsText)}">Copy XYZ</button>
                 <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(wp.fileLine)}">Copy File Line</button>
@@ -1636,6 +1897,69 @@
   // EDIT BASE MODAL (OWNER & COORDINATES)
   // ============================================================================
 
+  function renderEditDuplicateWarning() {
+    const warnBox = document.getElementById('edit-duplicate-warning-box');
+    const listEl = document.getElementById('edit-duplicate-matches-list');
+    if (!warnBox || !listEl || !state.dossierBaseId) return;
+
+    const name = document.getElementById('edit-name')?.value?.trim() || '';
+    const dim = document.getElementById('edit-dimension')?.value || 'overworld';
+    const xRaw = document.getElementById('edit-x')?.value;
+    const yRaw = document.getElementById('edit-y')?.value;
+    const zRaw = document.getElementById('edit-z')?.value;
+
+    const matches = findPotentialDuplicates(
+      {
+        name,
+        x: xRaw,
+        y: yRaw,
+        z: zRaw,
+        dimension: dim,
+        excludeId: state.dossierBaseId
+      },
+      state.bases,
+      160
+    );
+
+    if (matches.length === 0) {
+      warnBox.hidden = true;
+      listEl.innerHTML = '';
+      return;
+    }
+
+    warnBox.hidden = false;
+    const editSummary = document.getElementById('edit-dup-summary');
+    if (editSummary) {
+      editSummary.textContent = `${matches.length} other base${matches.length > 1 ? 's' : ''} nearby â€” saving is still allowed`;
+    }
+    listEl.innerHTML = matches
+      .map(m => {
+        const st = normalizeStatus(m.base.status);
+        const stLabel = STATUS_LABELS[st] || 'Scouted';
+        const nc = getNetherCoords(m.base);
+        return `
+          <div class="dup-match-card">
+            <div class="dup-match-top">
+              <div class="dup-match-owner">
+                <span class="mono" style="color:var(--text-muted);font-size:11px;">#${escapeHtml(m.base.plate || 'â€”')}</span>
+                <span>${escapeHtml(m.base.name)}</span>
+                <span class="status-tag is-${st}" style="pointer-events:none;">
+                  <span class="status-dot dot-${st}"></span><span>${stLabel}</span>
+                </span>
+              </div>
+              <span class="dup-match-kind">${escapeHtml(m.label)}</span>
+            </div>
+            <div class="dup-match-coords">
+              <span>Existing Coords: <strong>${m.base.x}, ${m.base.y}, ${m.base.z}</strong>${nc ? ` Â· Nether (Ă·8): ${nc.x}, 128, ${nc.z}` : ''}</span>
+              ${m.dist2D !== null ? `<span>Î”XZ: <strong>${m.dist2D}m</strong> (${m.chunkDist} chunk${m.chunkDist === 1 ? '' : 's'})</span>` : ''}
+            </div>
+            <div class="dup-match-reason">${escapeHtml(m.reason)}</div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
   function updateDossierComputedPreview() {
     const dim = document.getElementById('edit-dimension').value;
     const x = Number(document.getElementById('edit-x').value) || 0;
@@ -1648,7 +1972,7 @@
 
     document.getElementById('dossier-computed-strip').innerHTML = `
       <div>
-        <span class="popover-label" style="display:block;">NETHER ROOF (÷8)</span>
+        <span class="popover-label" style="display:block;">NETHER ROOF (Ă·8)</span>
         <strong style="color:var(--accent-nether);">${nc ? `${nc.x}, 128, ${nc.z}` : 'The End'}</strong>
       </div>
       <div>
@@ -1657,9 +1981,10 @@
       </div>
       <div>
         <span class="popover-label" style="display:block;">F3 HEADING YAW</span>
-        <strong>${bearing.cardinal} · ${bearing.yawStr}</strong>
+        <strong>${bearing.cardinal} Â· ${bearing.yawStr}</strong>
       </div>
     `;
+    renderEditDuplicateWarning();
   }
 
   function openDossier(baseId) {
@@ -1750,10 +2075,10 @@
     const inRoute = state.routeIds.includes(base.id);
 
     menu.innerHTML = `
-      <div class="ctx-section-label">${escapeHtml(base.plate || '')} · ${escapeHtml(base.name)}</div>
+      <div class="ctx-section-label">${escapeHtml(base.plate || '')} Â· ${escapeHtml(base.name)}</div>
       <button type="button" class="ctx-item" data-ctx-action="dossier" data-id="${escapeHtml(base.id)}">
         <span>Edit Owner &amp; Coordinates</span>
-        <kbd class="kbd-token">↵</kbd>
+        <kbd class="kbd-token">â†µ</kbd>
       </button>
       <button type="button" class="ctx-item" data-ctx-action="copy-xyz" data-id="${escapeHtml(base.id)}">
         <span>Copy Overworld XYZ (${base.x}, ${base.y}, ${base.z})</span>
@@ -1772,13 +2097,13 @@
       ${
         nc
           ? `<button type="button" class="ctx-item" data-ctx-action="xaero-nether" data-id="${escapeHtml(base.id)}">
-               <span>Copy Local Nether Line (÷8)</span>
+               <span>Copy Local Nether Line (Ă·8)</span>
                <kbd class="kbd-token">N</kbd>
              </button>`
           : ''
       }
       <button type="button" class="ctx-item" data-ctx-action="open-seedmap" data-id="${escapeHtml(base.id)}">
-        <span>Open in Chunkbase Seed Map ↗</span>
+        <span>Open in Chunkbase Seed Map â†—</span>
       </button>
       <div class="ctx-divider"></div>
       <button type="button" class="ctx-item" data-ctx-action="toggle-route" data-id="${escapeHtml(base.id)}">
@@ -1835,7 +2160,7 @@
 
     if (type === 'status') {
       picker.innerHTML = `
-        <div class="ctx-section-label">Status — ${escapeHtml(base.name)}</div>
+        <div class="ctx-section-label">Status â€” ${escapeHtml(base.name)}</div>
         ${['priority', 'scouted', 'compromised', 'raided']
           .map(
             st => `
@@ -1844,7 +2169,7 @@
               <span class="status-dot dot-${st}"></span>
               <span>${STATUS_LABELS[st]}</span>
             </span>
-            ${normalizeStatus(base.status) === st ? '<span>✓</span>' : ''}
+            ${normalizeStatus(base.status) === st ? '<span>âś“</span>' : ''}
           </button>
         `
           )
@@ -1860,7 +2185,7 @@
   }
 
   // ============================================================================
-  // COMMAND PALETTE (Ctrl+K / ⌘K)
+  // COMMAND PALETTE (Ctrl+K / âŚK)
   // ============================================================================
 
   function buildCommandItems(query) {
@@ -1899,7 +2224,7 @@
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Copy All Active Nether Roof Portal Waypoint Lines (÷8)',
+        label: 'Copy All Active Nether Roof Portal Waypoint Lines (Ă·8)',
         sub: 'mw$default_1.txt',
         run: () => {
           const lines = state.bases
@@ -1919,7 +2244,7 @@
       {
         group: 'Route & Telemetry Actions',
         label: `Open SMP Seed Map in Chunkbase (${SMP_SEED})`,
-        sub: 'External Map ↗',
+        sub: 'External Map â†—',
         run: () => {
           window.open(getChunkbaseUrl(state.origin.x, state.origin.z, 'overworld'), '_blank', 'noopener');
         }
@@ -1932,13 +2257,13 @@
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Toggle Global Coordinate Mode (Overworld ↔ Nether ÷8)',
-        sub: state.globalCoordMode === 'nether' ? 'Currently: Nether ÷8' : 'Currently: Overworld',
+        label: 'Toggle Global Coordinate Mode (Overworld â†” Nether Ă·8)',
+        sub: state.globalCoordMode === 'nether' ? 'Currently: Nether Ă·8' : 'Currently: Overworld',
         run: () => {
           state.globalCoordMode = state.globalCoordMode === 'nether' ? 'overworld' : 'nether';
           syncControlsFromState();
           renderAll();
-          showToast(`Display Mode → ${state.globalCoordMode === 'nether' ? 'Nether Roof (÷8)' : 'Overworld'}`);
+          showToast(`Display Mode â†’ ${state.globalCoordMode === 'nether' ? 'Nether Roof (Ă·8)' : 'Overworld'}`);
         }
       },
       {
@@ -2006,8 +2331,8 @@
       const nc = getNetherCoords(b);
       return {
         group: 'Cataloged Bases (Enter to Edit)',
-        label: `${b.plate || ''} · ${b.name}`,
-        sub: `OW: ${b.x}, ${b.y}, ${b.z}${nc ? ` · N: ${nc.x}, ${nc.z}` : ' · END'}`,
+        label: `${b.plate || ''} Â· ${b.name}`,
+        sub: `OW: ${b.x}, ${b.y}, ${b.z}${nc ? ` Â· N: ${nc.x}, ${nc.z}` : ' Â· END'}`,
         searchStr: `${b.plate} ${b.name} ${b.x} ${b.y} ${b.z}`.toLowerCase(),
         run: () => openDossier(b.id)
       };
@@ -2109,8 +2434,118 @@
   }
 
   // ============================================================================
-  // ADD BASE MODAL (OWNER & COORDINATES)
+  // ADD BASE MODAL (OWNER & COORDINATES + INTELLIGENT DUPLICATE DETECTION)
   // ============================================================================
+
+  function getCurrentIngestMatches() {
+    const name = document.getElementById('new-name')?.value?.trim() || '';
+    const xRaw = document.getElementById('new-x')?.value ?? '';
+    const yRaw = document.getElementById('new-y')?.value ?? 64;
+    const zRaw = document.getElementById('new-z')?.value ?? '';
+    const dimension = document.getElementById('new-dimension')?.value || 'overworld';
+    const customRadius = Number(document.getElementById('new-dup-radius')?.value) || 160;
+    return findPotentialDuplicates(
+      {
+        name,
+        x: xRaw,
+        y: yRaw,
+        z: zRaw,
+        dimension
+      },
+      state.bases,
+      customRadius
+    );
+  }
+
+  function renderIngestDuplicateWarning() {
+    const warnBox = document.getElementById('duplicate-warning-box');
+    const listEl = document.getElementById('duplicate-matches-list');
+    const badgeEl = document.getElementById('dup-warning-badge');
+    const summaryEl = document.getElementById('dup-warning-summary');
+    const saveAnywayBtn = document.getElementById('btn-ingest-save-anyway');
+    const confirmCb = document.getElementById('dup-manual-confirm-cb');
+    if (!warnBox || !listEl) return;
+
+    const matches = getCurrentIngestMatches();
+    const xRaw = document.getElementById('new-x')?.value ?? '';
+    const yRaw = document.getElementById('new-y')?.value ?? 64;
+    const zRaw = document.getElementById('new-z')?.value ?? '';
+    const hasValidCoords =
+      xRaw !== '' && zRaw !== '' && !Number.isNaN(Number(xRaw)) && !Number.isNaN(Number(zRaw));
+    const candX = Math.round(Number(xRaw) || 0);
+    const candY = Math.round(Number(yRaw) ?? 64);
+    const candZ = Math.round(Number(zRaw) || 0);
+
+    if (matches.length === 0) {
+      warnBox.hidden = true;
+      warnBox.classList.remove('is-attention');
+      listEl.innerHTML = '';
+      if (saveAnywayBtn) saveAnywayBtn.hidden = true;
+      if (confirmCb) confirmCb.checked = false;
+      return;
+    }
+
+    warnBox.hidden = false;
+    if (saveAnywayBtn) saveAnywayBtn.hidden = false;
+    const hasHigh = matches.some(m => m.severity === 'high');
+    if (badgeEl) {
+      badgeEl.textContent = hasHigh ? 'POTENTIAL DUPLICATE' : 'NEARBY BASE';
+    }
+    if (summaryEl) {
+      summaryEl.textContent = `${matches.length} nearby or matching base${matches.length > 1 ? 's' : ''} found`;
+    }
+
+    listEl.innerHTML = matches
+      .map(m => {
+        const st = normalizeStatus(m.base.status);
+        const stLabel = STATUS_LABELS[st] || 'Scouted';
+        const nc = getNetherCoords(m.base);
+        const dimBadge =
+          m.base.dimension === 'the_end'
+            ? `<span class="dim-pill">END</span>`
+            : m.base.dimension === 'the_nether'
+              ? `<span class="dim-pill">NETHER</span>`
+              : '';
+
+        return `
+          <div class="dup-match-card">
+            <div class="dup-match-top">
+              <div class="dup-match-owner">
+                <span class="mono" style="color:var(--text-muted);font-size:11px;">#${escapeHtml(m.base.plate || 'â€”')}</span>
+                <span>Owner: <strong>${escapeHtml(m.base.name)}</strong></span>
+                <span class="status-tag is-${st}" style="pointer-events:none;">
+                  <span class="status-dot dot-${st}"></span><span>${stLabel}</span>
+                </span>
+                ${dimBadge}
+              </div>
+              <span class="dup-match-kind">${escapeHtml(m.label)}</span>
+            </div>
+            <div class="dup-match-coords">
+              <span>Existing Coords: <strong>${m.base.x}, ${m.base.y}, ${m.base.z}</strong>${nc ? ` Â· Nether (Ă·8): <strong>${nc.x}, 128, ${nc.z}</strong>` : ''}</span>
+              ${
+                m.dist2D !== null
+                  ? `<span>Offset: <strong>${m.dist2D}m XZ</strong> (${m.chunkDist} chunk${m.chunkDist === 1 ? '' : 's'}) Â· Î”X ${m.dx}, Î”Y ${m.dy}, Î”Z ${m.dz}</span>`
+                  : `<span>Same Owner Name</span>`
+              }
+            </div>
+            <div class="dup-match-reason">${escapeHtml(m.reason)}</div>
+            <div class="dup-match-actions">
+              ${
+                hasValidCoords
+                  ? `<button type="button" class="btn-secondary btn-xs" data-dup-update-id="${escapeHtml(m.base.id)}">
+                       Update ${escapeHtml(m.base.name)}'s Coords to (${candX}, ${candY}, ${candZ})
+                     </button>`
+                  : ''
+              }
+              <button type="button" class="btn-secondary btn-xs" data-dup-inspect-id="${escapeHtml(m.base.id)}">
+                Inspect Existing Base
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
 
   function updateNewBaseNetherPreview() {
     const xRaw = document.getElementById('new-x').value;
@@ -2119,20 +2554,23 @@
     const el = document.getElementById('new-nether-preview');
     if (dim === 'the_end') {
       el.textContent = 'Dimension: The End (No Nether Portal link)';
-      return;
-    }
-    const x = Number(xRaw);
-    const z = Number(zRaw);
-    if (xRaw !== '' && zRaw !== '' && !Number.isNaN(x) && !Number.isNaN(z)) {
-      el.textContent = `Nether Roof Portal (÷8): ${Math.floor(x / 8)}, 128, ${Math.floor(z / 8)}`;
     } else {
-      el.textContent = 'Nether Roof Portal (÷8): —';
+      const x = Number(xRaw);
+      const z = Number(zRaw);
+      if (xRaw !== '' && zRaw !== '' && !Number.isNaN(x) && !Number.isNaN(z)) {
+        el.textContent = `Nether Roof Portal (Ă·8): ${Math.floor(x / 8)}, 128, ${Math.floor(z / 8)}`;
+      } else {
+        el.textContent = 'Nether Roof Portal (Ă·8): â€”';
+      }
     }
+    renderIngestDuplicateWarning();
   }
 
   function openIngestModal() {
     state.lastFocusedElement = document.activeElement;
     document.getElementById('ingest-form').reset();
+    const confirmCb = document.getElementById('dup-manual-confirm-cb');
+    if (confirmCb) confirmCb.checked = false;
     updateNewBaseNetherPreview();
     document.getElementById('ingest-modal').hidden = false;
     document.getElementById('new-name').focus();
@@ -2358,7 +2796,7 @@
       };
       updateCalculatorFromOverworld();
       renderAll();
-      showToast(`Vector Origin → ${state.origin.label}`);
+      showToast(`Vector Origin â†’ ${state.origin.label}`);
     });
 
     // Status Filter Tabs
@@ -2404,7 +2842,7 @@
     });
     document.getElementById('btn-sort-dir').addEventListener('click', e => {
       state.sortDir *= -1;
-      e.currentTarget.textContent = state.sortDir === 1 ? '↑ ASC' : '↓ DESC';
+      e.currentTarget.textContent = state.sortDir === 1 ? 'â†‘ ASC' : 'â†“ DESC';
       renderAll();
     });
     document.getElementById('toggle-card-vectors').addEventListener('change', e => {
@@ -2531,7 +2969,7 @@
         const st = btn.dataset.bulkStatus;
         const ids = [...state.selectedIds];
         await bulkUpdateBases(ids, { status: st });
-        showToast(`Updated ${ids.length} bases → ${STATUS_LABELS[st]}`);
+        showToast(`Updated ${ids.length} bases â†’ ${STATUS_LABELS[st]}`);
       });
     });
     document.getElementById('btn-bulk-route').addEventListener('click', () => {
@@ -2806,6 +3244,12 @@
 
     // Delegated Click Handler
     document.body.addEventListener('click', async e => {
+      // Empty-state "+ Add First Base"
+      if (e.target.closest('[data-open-ingest]')) {
+        openIngestModal();
+        return;
+      }
+
       // Reset All Filters (from Empty State button)
       if (e.target.closest('[data-reset-all-filters]')) {
         state.filters.status = 'all';
@@ -2871,7 +3315,7 @@
         return;
       }
 
-      // Inline Rename Trigger Button (✎ in Table View)
+      // Inline Rename Trigger Button (âśŽ in Table View)
       const inlineRenameBtn = e.target.closest('[data-inline-rename]');
       if (inlineRenameBtn) {
         e.stopPropagation();
@@ -2881,7 +3325,7 @@
         return;
       }
 
-      // Open Context Menu via ⋯ button (or close if already open on this button)
+      // Open Context Menu via â‹Ż button (or close if already open on this button)
       const ctxBtn = e.target.closest('[data-open-ctx]');
       if (ctxBtn) {
         e.stopPropagation();
@@ -2901,7 +3345,7 @@
             const curr = normalizeStatus(base.status);
             const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(curr) + 1) % STATUS_CYCLE.length];
             await updateBase(id, { status: next });
-            showToast(`${base.name} → ${STATUS_LABELS[next]}`);
+            showToast(`${base.name} â†’ ${STATUS_LABELS[next]}`);
           }
         } else {
           openInlinePicker('status', id, statusBtn);
@@ -2916,7 +3360,7 @@
         const st = ctxStatus.dataset.ctxStatus;
         closeContextMenus();
         const updated = await updateBase(id, { status: st });
-        if (updated) showToast(`${updated.name} → ${STATUS_LABELS[st]}`);
+        if (updated) showToast(`${updated.name} â†’ ${STATUS_LABELS[st]}`);
         return;
       }
 
@@ -2978,7 +3422,7 @@
         return;
       }
 
-      // Route Reorder (↑ / ↓)
+      // Route Reorder (â†‘ / â†“)
       const routeMoveBtn = e.target.closest('[data-route-move]');
       if (routeMoveBtn) {
         const [idxStr, dirStr] = routeMoveBtn.dataset.routeMove.split(':');
@@ -3014,7 +3458,7 @@
       const copyEl = e.target.closest('[data-copy]');
       if (copyEl && copyEl.dataset.copy) {
         e.stopPropagation();
-        await copyText(copyEl.dataset.copy, `Copied ${copyEl.dataset.copy}`, copyEl, '✓ Copied');
+        await copyText(copyEl.dataset.copy, `Copied ${copyEl.dataset.copy}`, copyEl, 'âś“ Copied');
         return;
       }
 
@@ -3025,7 +3469,7 @@
         const base = state.bases.find(b => b.id === xaeroBtn.dataset.copyXaero);
         if (!base) return;
         const wp = buildXaeroWaypointData(base, { indexPrefix: base.plate });
-        await copyText(wp.fileLine, `Copied local Xaero line for ${base.name}`, xaeroBtn, '✓ Copied');
+        await copyText(wp.fileLine, `Copied local Xaero line for ${base.name}`, xaeroBtn, 'âś“ Copied');
         return;
       }
 
@@ -3068,7 +3512,7 @@
         const wx = Math.round(state.radar.centerX + (mx - rect.width / 2) / pxPerBlock);
         const wz = Math.round(state.radar.centerZ + (my - rect.height / 2) / pxPerBlock);
         document.getElementById('radar-cursor-readout').textContent =
-          `X: ${wx}, Z: ${wz} · Nether: ${Math.floor(wx / 8)}, ${Math.floor(wz / 8)}`;
+          `X: ${wx}, Z: ${wz} Â· Nether: ${Math.floor(wx / 8)}, ${Math.floor(wz / 8)}`;
 
         let hit = null;
         for (const b of getFilteredBases()) {
@@ -3162,7 +3606,7 @@
     document.getElementById('dossier-modal').addEventListener('click', e => {
       if (e.target.id === 'dossier-modal') closeDossier();
     });
-    ['edit-x', 'edit-y', 'edit-z', 'edit-dimension'].forEach(id => {
+    ['edit-name', 'edit-x', 'edit-y', 'edit-z', 'edit-dimension'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', updateDossierComputedPreview);
       document.getElementById(id)?.addEventListener('change', updateDossierComputedPreview);
     });
@@ -3254,25 +3698,93 @@
     document.getElementById('ingest-modal').addEventListener('click', e => {
       if (e.target.id === 'ingest-modal') closeIngestModal();
     });
-    ['new-x', 'new-z', 'new-dimension'].forEach(id => {
+    ['new-name', 'new-x', 'new-y', 'new-z', 'new-dimension', 'new-dup-radius'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', updateNewBaseNetherPreview);
       document.getElementById(id)?.addEventListener('change', updateNewBaseNetherPreview);
     });
     bindSmartCoordPaste('new-x', 'new-y', 'new-z', updateNewBaseNetherPreview);
 
-    document.getElementById('ingest-form').addEventListener('submit', async e => {
+    const readIngestPayload = () => ({
+      name: document.getElementById('new-name').value.trim(),
+      status: document.getElementById('new-status').value,
+      x: Number(document.getElementById('new-x').value),
+      y: Number(document.getElementById('new-y').value),
+      z: Number(document.getElementById('new-z').value),
+      dimension: document.getElementById('new-dimension').value
+    });
+
+    const flagDuplicateAttention = () => {
+      const warnBox = document.getElementById('duplicate-warning-box');
+      if (!warnBox) return;
+      renderIngestDuplicateWarning();
+      warnBox.classList.remove('is-attention');
+      void warnBox.offsetWidth; // restart highlight animation
+      warnBox.classList.add('is-attention');
+      warnBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      showToast("Potential duplicate â€” compare below, or click 'Save Anyway as Separate Base'");
+    };
+
+    let ingestSaving = false;
+    const submitIngest = async confirmDuplicate => {
+      if (ingestSaving) return;
+      const form = document.getElementById('ingest-form');
+      if (!form.reportValidity()) return;
+
+      const matches = getCurrentIngestMatches();
+      const confirmed = confirmDuplicate || document.getElementById('dup-manual-confirm-cb')?.checked;
+      if (matches.length > 0 && !confirmed) {
+        flagDuplicateAttention();
+        return;
+      }
+
+      ingestSaving = true;
+      try {
+        const created = await createBase({ ...readIngestPayload(), confirmDuplicate: matches.length > 0 });
+        if (created?.duplicateWarning) {
+          // Server knows about a base the client didn't have yet â€” refresh and re-show
+          await fetchBases();
+          flagDuplicateAttention();
+          return;
+        }
+        if (created) {
+          closeIngestModal();
+          showToast(`Added ${created.name}`);
+        }
+      } finally {
+        ingestSaving = false;
+      }
+    };
+
+    document.getElementById('ingest-form').addEventListener('submit', e => {
       e.preventDefault();
-      const created = await createBase({
-        name: document.getElementById('new-name').value.trim(),
-        status: document.getElementById('new-status').value,
-        x: Number(document.getElementById('new-x').value),
-        y: Number(document.getElementById('new-y').value),
-        z: Number(document.getElementById('new-z').value),
-        dimension: document.getElementById('new-dimension').value
-      });
-      if (created) {
-        closeIngestModal();
-        showToast(`Added ${created.name}`);
+      submitIngest(false);
+    });
+    document.getElementById('btn-ingest-save-anyway')?.addEventListener('click', () => submitIngest(true));
+
+    // Duplicate match actions (Update existing coords / Inspect existing)
+    document.getElementById('duplicate-matches-list')?.addEventListener('click', async e => {
+      const updateBtn = e.target.closest('[data-dup-update-id]');
+      if (updateBtn) {
+        e.stopPropagation();
+        const payload = readIngestPayload();
+        if (Number.isNaN(payload.x) || Number.isNaN(payload.z)) return;
+        const id = updateBtn.dataset.dupUpdateId;
+        const patch = { x: payload.x, y: Number.isNaN(payload.y) ? 64 : payload.y, z: payload.z, dimension: payload.dimension };
+        const updated = await updateBase(id, patch);
+        if (updated) {
+          closeIngestModal();
+          showToast(`Updated ${updated.name} â†’ ${patch.x}, ${patch.y}, ${patch.z}`);
+        }
+        return;
+      }
+      const inspectBtn = e.target.closest('[data-dup-inspect-id]');
+      if (inspectBtn) {
+        e.stopPropagation();
+        const id = inspectBtn.dataset.dupInspectId;
+        const prevFocus = state.lastFocusedElement;
+        document.getElementById('ingest-modal').hidden = true;
+        state.lastFocusedElement = prevFocus;
+        openDossier(id);
       }
     });
 
