@@ -882,7 +882,7 @@
                 ${
                   state.showCardVectors
                     ? `<div class="card-vector-line" title="Distance and F3 heading yaw from active Origin">
-                         Δ ${formatNumber(dist.ow)}m OW ${dist.nether !== null ? `(${formatNumber(dist.nether)}m N)` : ''} · Yaw ${bearing.cardinal} ${bearing.yawStr}
+                         Δ ${formatNumber(dist.ow)}m${dist.nether !== null ? ` (${formatNumber(dist.nether)}m N)` : ''} · ${bearing.cardinal} ${bearing.yawStr}
                        </div>`
                     : `<div></div>`
                 }
