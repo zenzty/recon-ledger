@@ -2,27 +2,9 @@
   'use strict';
 
   const GIST_ID = '59b75b538b54d79b1f4068000714e761';
-  const BUILTIN_IMAGES = new Set([
-    'artap2.png',
-    'Bence_0427.png',
-    'dort930656.png',
-    'dort930656_2.png',
-    'DUNDUS.png',
-    'frrrupy.png',
-    'geminixi.png',
-    'MANDYzZz.png',
-    'marcizaza.png',
-    'Materetek34566_benceapa2.png',
-    'monalokal2011.png',
-    'monalokal2011_2.png',
-    'nemvagyok2.png',
-    'oliver1234.png',
-    'SPKIY.png',
-    'vadkacsa.png'
-  ]);
+  const SMP_SEED = '-614052161281575935';
 
   const STATUS_ORDER = { priority: 0, scouted: 1, compromised: 2, raided: 3 };
-  const TIER_ORDER = { high: 0, medium: 1, low: 2 };
   const STATUS_CYCLE = ['priority', 'scouted', 'compromised', 'raided'];
   const STATUS_LABELS = {
     priority: 'Priority',
@@ -30,28 +12,20 @@
     compromised: 'Alert',
     raided: 'Raided'
   };
-  const TIER_LABELS = {
-    high: 'High',
-    medium: 'Med',
-    low: 'Low'
-  };
 
   const state = {
     apiBase: '',
     bases: [],
-    untracked: [],
     activeView: 'grid', // 'grid' | 'table' | 'map'
     globalCoordMode: 'overworld', // 'overworld' | 'nether'
-    cropMode: 'subject', // 'subject' | 'raw'
     showCardVectors: true,
     filters: {
       query: '',
       status: 'all',
-      tiers: new Set(),
       dimensions: new Set(),
       routeOnly: false
     },
-    sortBy: 'priority', // 'priority' | 'plate' | 'distance' | 'depth' | 'name' | 'x' | 'tier'
+    sortBy: 'priority', // 'priority' | 'plate' | 'distance' | 'depth' | 'name' | 'x'
     sortDir: 1, // 1 = asc, -1 = desc
     origin: { x: 0, z: 0, label: 'Spawn (0, 0)' },
     selectedIds: new Set(),
@@ -59,20 +33,14 @@
     routeIds: [],
     focusedBaseId: null,
     dossierBaseId: null,
-    dossierTransform: { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 },
     mapSelectedId: null,
     tableColumns: {
       plate: true,
       status: true,
-      tier: true,
-      loot: true,
       ow: true,
       nether: true,
-      vector: true,
-      meta: false,
-      players: false
+      vector: true
     },
-    tableShowPreview: true,
     tableCompact: false,
     radar: {
       centerX: 0,
@@ -99,22 +67,22 @@
       baseId: null,
       triggerEl: null
     },
-    pendingUploadFilename: '',
     lastFocusedElement: null
   };
 
-  const PREFS_KEY = 'recon_ledger_prefs_v1';
+  const PREFS_KEY = 'recon_ledger_prefs_v2';
 
   function loadPersistedPrefs() {
     try {
-      const raw = localStorage.getItem(PREFS_KEY);
+      const raw = localStorage.getItem(PREFS_KEY) || localStorage.getItem('recon_ledger_prefs_v1');
       if (!raw) return;
       const saved = JSON.parse(raw);
       if (['grid', 'table', 'map'].includes(saved.activeView)) state.activeView = saved.activeView;
       if (['overworld', 'nether'].includes(saved.globalCoordMode)) state.globalCoordMode = saved.globalCoordMode;
-      if (['subject', 'raw'].includes(saved.cropMode)) state.cropMode = saved.cropMode;
       if (typeof saved.showCardVectors === 'boolean') state.showCardVectors = saved.showCardVectors;
-      if (typeof saved.sortBy === 'string') state.sortBy = saved.sortBy;
+      if (['priority', 'plate', 'distance', 'depth', 'name', 'x'].includes(saved.sortBy)) {
+        state.sortBy = saved.sortBy;
+      }
       if (saved.sortDir === 1 || saved.sortDir === -1) state.sortDir = saved.sortDir;
       if (saved.origin && typeof saved.origin.x === 'number' && typeof saved.origin.z === 'number') {
         state.origin = {
@@ -127,9 +95,12 @@
         state.routeIds = saved.routeIds.filter(id => typeof id === 'string');
       }
       if (saved.tableColumns && typeof saved.tableColumns === 'object') {
-        state.tableColumns = { ...state.tableColumns, ...saved.tableColumns };
+        ['plate', 'status', 'ow', 'nether', 'vector'].forEach(col => {
+          if (typeof saved.tableColumns[col] === 'boolean') {
+            state.tableColumns[col] = saved.tableColumns[col];
+          }
+        });
       }
-      if (typeof saved.tableShowPreview === 'boolean') state.tableShowPreview = saved.tableShowPreview;
       if (typeof saved.tableCompact === 'boolean') state.tableCompact = saved.tableCompact;
     } catch {}
   }
@@ -141,14 +112,12 @@
         JSON.stringify({
           activeView: state.activeView,
           globalCoordMode: state.globalCoordMode,
-          cropMode: state.cropMode,
           showCardVectors: state.showCardVectors,
           sortBy: state.sortBy,
           sortDir: state.sortDir,
           origin: state.origin,
           routeIds: state.routeIds,
           tableColumns: state.tableColumns,
-          tableShowPreview: state.tableShowPreview,
           tableCompact: state.tableCompact
         })
       );
@@ -166,9 +135,6 @@
     document.querySelectorAll('#global-coord-mode .seg-item').forEach(btn => {
       btn.classList.toggle('is-active', btn.dataset.coordMode === state.globalCoordMode);
     });
-    document.querySelectorAll('#toggle-crop-mode .seg-item').forEach(btn => {
-      btn.classList.toggle('is-active', btn.dataset.crop === state.cropMode);
-    });
 
     const sortSel = document.getElementById('sort-select');
     if (sortSel) sortSel.value = state.sortBy;
@@ -177,8 +143,6 @@
 
     const vecCb = document.getElementById('toggle-card-vectors');
     if (vecCb) vecCb.checked = state.showCardVectors;
-    const prevCb = document.getElementById('toggle-table-preview');
-    if (prevCb) prevCb.checked = state.tableShowPreview;
     const compCb = document.getElementById('toggle-table-compact');
     if (compCb) compCb.checked = state.tableCompact;
 
@@ -251,8 +215,6 @@
       .trim();
   }
 
-  const SMP_SEED = '-614052161281575935';
-
   function getChunkbaseUrl(x, z, dimension = 'overworld') {
     const dimParam = dimension === 'the_end' ? 'end' : dimension === 'the_nether' ? 'nether' : 'overworld';
     return `https://www.chunkbase.com/apps/seed-map#seed=${SMP_SEED}&platform=java_1_21&dimension=${dimParam}&x=${Math.round(x || 0)}&z=${Math.round(z || 0)}&zoom=0.5`;
@@ -262,7 +224,6 @@
     const {
       indexPrefix = '',
       coordMode = state.globalCoordMode === 'nether' ? 'nether_roof' : 'exact',
-      includeTier = false,
       setName = 'gui.xaero_default',
       disableRaided = true
     } = options;
@@ -281,9 +242,7 @@
     }
 
     const prefixStr = indexPrefix ? `${indexPrefix}_` : '';
-    const tierChar = base.tier ? base.tier[0].toUpperCase() : 'M';
-    const tierTag = includeTier ? ` [${tierChar} Y${base.y}]` : '';
-    const rawName = `${prefixStr}${base.name}${tierTag}${dimSuffix}`;
+    const rawName = `${prefixStr}${base.name}${dimSuffix}`;
     const name = sanitizeXaeroToken(rawName);
 
     const initials = indexPrefix
@@ -307,14 +266,6 @@
       coordsText: `${x} ${y} ${z}`,
       fileLine: `waypoint:${name}:${initials}:${x}:${y}:${z}:${color}:${disabled}:0:${cleanSet}:false:0:0:false`
     };
-  }
-
-  function getPlateSrc(filename) {
-    if (!filename) return '';
-    if (BUILTIN_IMAGES.has(filename)) {
-      return `./plates/${encodeURIComponent(filename)}`;
-    }
-    return `${state.apiBase}/plates/${encodeURIComponent(filename)}`;
   }
 
   // ============================================================================
@@ -452,11 +403,9 @@
       if (!res.ok) throw new Error('API non-200');
       const data = await res.json();
       state.bases = data.bases || [];
-      state.untracked = data.untracked || [];
     } catch {
       const fallbackRes = await fetch(`./bases.json?t=${Date.now()}`);
       state.bases = (await fallbackRes.json()) || [];
-      state.untracked = [];
     }
     const validIds = new Set(state.bases.map(b => b.id));
     state.routeIds = state.routeIds.filter(id => validIds.has(id));
@@ -481,7 +430,6 @@
       renderAll();
       return data.base;
     } catch {
-      // Optimistic local update if offline
       const idx = state.bases.findIndex(b => b.id === id);
       if (idx !== -1) {
         state.bases[idx] = { ...state.bases[idx], ...patch };
@@ -557,9 +505,6 @@
       if (!res.ok) throw new Error();
       const data = await res.json();
       state.bases = data.bases;
-      state.untracked = state.untracked.filter(
-        f => f.toLowerCase() !== String(payload.image || '').toLowerCase()
-      );
       populateOriginSelect();
       renderAll();
       return data.base;
@@ -599,20 +544,17 @@
     const list = state.bases.filter(b => {
       const st = normalizeStatus(b.status);
       if (state.filters.status !== 'all' && st !== state.filters.status) return false;
-      if (state.filters.tiers.size > 0 && !state.filters.tiers.has(b.tier || 'medium')) return false;
       if (state.filters.dimensions.size > 0 && !state.filters.dimensions.has(b.dimension || 'overworld')) return false;
       if (state.filters.routeOnly && !state.routeIds.includes(b.id)) return false;
 
       if (q) {
+        const nc = getNetherCoords(b);
         const hay = [
           b.plate,
           b.name,
-          b.biome,
-          b.region,
-          b.containers,
-          b.notes,
-          ...(b.players || []),
-          `${b.x} ${b.y} ${b.z}`
+          `${b.x} ${b.y} ${b.z}`,
+          `${b.x}, ${b.y}, ${b.z}`,
+          nc ? `${nc.x} ${nc.z}` : ''
         ]
           .join(' ')
           .toLowerCase();
@@ -627,12 +569,8 @@
         case 'priority': {
           const sDiff = (STATUS_ORDER[normalizeStatus(a.status)] ?? 9) - (STATUS_ORDER[normalizeStatus(b.status)] ?? 9);
           if (sDiff !== 0) return sDiff * dir;
-          const tDiff = (TIER_ORDER[a.tier || 'medium'] ?? 9) - (TIER_ORDER[b.tier || 'medium'] ?? 9);
-          if (tDiff !== 0) return tDiff * dir;
           return a.name.localeCompare(b.name);
         }
-        case 'tier':
-          return ((TIER_ORDER[a.tier || 'medium'] ?? 9) - (TIER_ORDER[b.tier || 'medium'] ?? 9)) * dir;
         case 'distance': {
           const da = getDistanceFrom(a, state.origin.x, state.origin.z).ow;
           const db = getDistanceFrom(b, state.origin.x, state.origin.z).ow;
@@ -692,11 +630,7 @@
     document.getElementById('count-compromised').textContent = compromised;
     document.getElementById('count-raided').textContent = raided;
 
-    // Facet counts
-    ['high', 'medium', 'low'].forEach(t => {
-      const el = document.getElementById(`facet-count-tier-${t}`);
-      if (el) el.textContent = state.bases.filter(b => (b.tier || 'medium') === t).length;
-    });
+    // Dimension facet counts
     ['overworld', 'the_end', 'the_nether'].forEach(d => {
       const el = document.getElementById(`facet-count-dim-${d}`);
       if (el) el.textContent = state.bases.filter(b => (b.dimension || 'overworld') === d).length;
@@ -711,23 +645,6 @@
     document.getElementById('coord-mode-indicator').textContent =
       state.globalCoordMode === 'nether' ? 'Mode: Nether ÷8' : 'Nether ÷8';
 
-    // Untracked banner
-    const banner = document.getElementById('untracked-banner');
-    if (state.untracked.length > 0) {
-      banner.hidden = false;
-      document.getElementById('untracked-list-text').textContent =
-        `${state.untracked.length} new screenshot(s) detected in folder: ${state.untracked.join(', ')}`;
-      document.getElementById('untracked-buttons').innerHTML = state.untracked
-        .slice(0, 4)
-        .map(
-          fname =>
-            `<button type="button" class="btn-secondary btn-xs" data-ingest-file="${escapeHtml(fname)}">+ Catalog ${escapeHtml(fname)}</button>`
-        )
-        .join('');
-    } else {
-      banner.hidden = true;
-    }
-
     renderActiveFacetChips();
     renderBulkActionBar();
   }
@@ -737,11 +654,6 @@
     const badge = document.getElementById('active-facet-count');
     const chips = [];
 
-    state.filters.tiers.forEach(t => {
-      chips.push(
-        `<span class="filter-chip">Tier: ${TIER_LABELS[t] || t} <button type="button" data-remove-facet="tier:${t}" aria-label="Remove tier filter">×</button></span>`
-      );
-    });
     state.filters.dimensions.forEach(d => {
       const label = d === 'the_end' ? 'The End' : d === 'the_nether' ? 'Nether' : 'Overworld';
       chips.push(
@@ -826,10 +738,11 @@
       const id = card.dataset.baseId;
       const rIdx = state.routeIds.indexOf(id);
       const inRoute = rIdx !== -1;
+      card.classList.toggle('in-route', inRoute);
       const chip = card.querySelector('.card-route-chip[data-toggle-route]');
       if (chip) {
-        chip.classList.toggle('in-route', inRoute);
-        chip.textContent = inRoute ? `Stop #${rIdx + 1}` : '+ Route';
+        chip.classList.toggle('is-routed', inRoute);
+        chip.textContent = inRoute ? `Route #0${rIdx + 1}` : '+ Route';
       }
     });
 
@@ -837,21 +750,20 @@
       const id = tr.dataset.baseId;
       const rIdx = state.routeIds.indexOf(id);
       const inRoute = rIdx !== -1;
-      const btn = tr.querySelector('.tbl-action-btn[data-toggle-route]');
+      const btn = tr.querySelector('[data-toggle-route]');
       if (btn) {
-        btn.classList.toggle('in-route', inRoute);
-        btn.textContent = inRoute ? `#${rIdx + 1}` : '+Route';
+        btn.classList.toggle('is-copied', inRoute);
+        btn.textContent = inRoute ? `#0${rIdx + 1}` : '+Route';
       }
     });
   }
 
   // ============================================================================
-  // VIEW 1: PHOTO GRID
+  // VIEW 1: COORDINATE CARDS (OWNER & COORDINATES)
   // ============================================================================
 
   function renderGrid(filtered) {
     const grid = document.getElementById('bases-grid');
-    grid.classList.toggle('crop-subject', state.cropMode === 'subject');
 
     if (filtered.length === 0) {
       grid.innerHTML = `
@@ -867,77 +779,82 @@
       .map(base => {
         const st = normalizeStatus(base.status);
         const stLabel = STATUS_LABELS[st] || 'Scouted';
-        const tier = base.tier || 'medium';
         const nc = getNetherCoords(base);
         const dist = getDistanceFrom(base, state.origin.x, state.origin.z);
         const bearing = getBearing(state.origin.x, state.origin.z, base.x, base.z);
-        const imgSrc = getPlateSrc(base.image);
-        const focusOrigin = base.cropFocus || '50% 50%';
         const isSelected = state.selectedIds.has(base.id);
         const routeIdx = state.routeIds.indexOf(base.id);
         const isInRoute = routeIdx !== -1;
 
         const xyzCopy = `${base.x} ${base.y} ${base.z}`;
         const netherCopy = nc ? `${nc.x} 128 ${nc.z}` : '';
-        const summary = base.containers || base.notes || 'No field notes recorded';
+        const dimLabel =
+          base.dimension === 'the_end'
+            ? 'THE END (X, Y, Z)'
+            : base.dimension === 'the_nether'
+              ? 'NETHER (X, Y, Z)'
+              : 'OVERWORLD (X, Y, Z)';
 
-        const primaryCoordHtml =
+        const owCellHtml = `
+          <div class="card-coord-cell">
+            <span class="card-coord-label">${dimLabel}</span>
+            <span class="coord-xyz" data-copy="${escapeHtml(xyzCopy)}" title="Click to copy exact coordinates (${escapeHtml(xyzCopy)})">
+              ${base.x}, ${base.y}, ${base.z}
+            </span>
+          </div>
+        `;
+
+        const netherCellHtml = `
+          <div class="card-coord-cell">
+            <span class="card-coord-label">NETHER ROOF (÷8)</span>
+            ${
+              nc
+                ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof portal coordinates (${escapeHtml(netherCopy)})">
+                     ${nc.x}, 128, ${nc.z}
+                   </span>`
+                : `<span style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted);">End Portal</span>`
+            }
+          </div>
+        `;
+
+        const coordCellsHtml =
           state.globalCoordMode === 'nether' && nc
-            ? `<span class="coord-xyz" style="color:var(--accent-nether);" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof XYZ">N: ${nc.x}, 128, ${nc.z}</span>
-               <span class="coord-nether" style="color:var(--text-muted);" data-copy="${escapeHtml(xyzCopy)}" title="Click to copy Overworld XYZ">· OW: ${base.x}, ${base.z}</span>`
-            : `<span class="coord-xyz" data-copy="${escapeHtml(xyzCopy)}" title="Click to copy Overworld XYZ">${base.x}, ${base.y}, ${base.z}</span>
-               ${
-                 nc
-                   ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof coordinates (X÷8, 128, Z÷8)">· N: ${nc.x}, ${nc.z}</span>`
-                   : `<span class="coord-nether" style="color:var(--text-muted);">· End</span>`
-               }`;
+            ? `${netherCellHtml}${owCellHtml}`
+            : `${owCellHtml}${netherCellHtml}`;
 
         return `
           <article
             class="base-card ${st === 'raided' ? 'is-raided' : ''} ${isSelected ? 'is-selected' : ''} ${isInRoute ? 'in-route' : ''}"
             data-base-id="${escapeHtml(base.id)}"
           >
-            <div class="card-media-overlay">
-              <button
-                type="button"
-                class="card-select-chip ${isSelected ? 'is-checked' : ''}"
-                data-select-chip="${escapeHtml(base.id)}"
-                aria-pressed="${isSelected}"
-                title="Select for bulk editing (Shift+Click for range)"
-              >
-                <span class="select-box-icon" aria-hidden="true">${isSelected ? '✓' : ''}</span>
-                <span>Select</span>
-              </button>
-
-              <button
-                type="button"
-                class="card-route-chip ${isInRoute ? 'is-routed' : ''}"
-                data-toggle-route="${escapeHtml(base.id)}"
-                title="${isInRoute ? 'Click to remove from Raid Route' : 'Add to Raid Route Planner'}"
-              >
-                ${isInRoute ? `Route #0${routeIdx + 1}` : '+ Route'}
-              </button>
-            </div>
-
-            <div class="card-media" data-open-dossier="${escapeHtml(base.id)}">
-              ${
-                imgSrc
-                  ? `<img src="${imgSrc}" alt="${escapeHtml(base.name)}" loading="lazy" style="transform-origin:${escapeHtml(focusOrigin)};object-position:${escapeHtml(focusOrigin)};" />`
-                  : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:12px;">No screenshot</div>`
-              }
-            </div>
-
             <div class="card-body">
               <div class="card-header-row">
                 <div class="card-title-wrap">
-                  <span class="card-plate-idx">${escapeHtml(base.plate || '')}</span>
-                  <h2 class="card-title" data-open-dossier="${escapeHtml(base.id)}">${escapeHtml(base.name)}</h2>
+                  <button
+                    type="button"
+                    class="card-select-chip ${isSelected ? 'is-checked' : ''}"
+                    data-select-chip="${escapeHtml(base.id)}"
+                    aria-pressed="${isSelected}"
+                    aria-label="Select ${escapeHtml(base.name)}"
+                    title="Select for bulk editing (Shift+Click for range)"
+                  >
+                    <span class="select-box-icon" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+                  </button>
+                  <span class="card-plate-idx">#${escapeHtml(base.plate || '01')}</span>
+                  <h2 class="card-title" data-open-dossier="${escapeHtml(base.id)}" title="Click to edit ${escapeHtml(base.name)}">${escapeHtml(base.name)}</h2>
                   ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
                   ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
-                  ${tier === 'high' ? `<button type="button" class="tier-pill tier-high" data-tier-picker="${escapeHtml(base.id)}" title="Click to change Loot Tier">HIGH</button>` : ''}
                 </div>
 
                 <div class="card-header-right">
+                  <button
+                    type="button"
+                    class="card-route-chip ${isInRoute ? 'is-routed' : ''}"
+                    data-toggle-route="${escapeHtml(base.id)}"
+                    title="${isInRoute ? 'Click to remove from Raid Route' : 'Add to Raid Route Planner'}"
+                  >
+                    ${isInRoute ? `Route #0${routeIdx + 1}` : '+ Route'}
+                  </button>
                   <button
                     type="button"
                     class="status-tag is-${st}"
@@ -957,30 +874,37 @@
                 </div>
               </div>
 
-              <p class="card-desc" title="${escapeHtml(summary)}">${escapeHtml(summary)}</p>
-
-              ${
-                state.showCardVectors
-                  ? `<div class="card-vector-line">
-                       <span>Δ ${formatNumber(dist.ow)}m OW ${dist.nether !== null ? `(${formatNumber(dist.nether)}m N)` : ''}</span>
-                       <span>Yaw ${bearing.cardinal} ${bearing.yawStr}</span>
-                     </div>`
-                  : ''
-              }
+              <div class="card-coord-grid">
+                ${coordCellsHtml}
+              </div>
 
               <div class="card-footer-row">
-                <div class="coord-group">
-                  ${primaryCoordHtml}
-                </div>
+                ${
+                  state.showCardVectors
+                    ? `<div class="card-vector-line" title="Distance and F3 heading yaw from active Origin">
+                         Δ ${formatNumber(dist.ow)}m OW ${dist.nether !== null ? `(${formatNumber(dist.nether)}m N)` : ''} · Yaw ${bearing.cardinal} ${bearing.yawStr}
+                       </div>`
+                    : `<div></div>`
+                }
 
-                <button
-                  type="button"
-                  class="xaero-copy-btn"
-                  data-copy-xaero="${escapeHtml(base.id)}"
-                  title="Copy local Xaero waypoint file line (for mw$default_1.txt)"
-                >
-                  Copy Xaero
-                </button>
+                <div class="card-actions-group">
+                  <button
+                    type="button"
+                    class="xaero-copy-btn"
+                    data-copy="${escapeHtml(state.globalCoordMode === 'nether' && nc ? netherCopy : xyzCopy)}"
+                    title="Copy XYZ coordinates to clipboard"
+                  >
+                    Copy XYZ
+                  </button>
+                  <button
+                    type="button"
+                    class="xaero-copy-btn"
+                    data-copy-xaero="${escapeHtml(base.id)}"
+                    title="Copy local Xaero waypoint file line (for mw$default_1.txt)"
+                  >
+                    Copy Xaero
+                  </button>
+                </div>
               </div>
             </div>
           </article>
@@ -990,20 +914,14 @@
   }
 
   // ============================================================================
-  // VIEW 2: TANSTACK-INSPIRED POWER DATA TABLE + DOCKED PREVIEW
+  // VIEW 2: COORDINATE DATA TABLE
   // ============================================================================
 
   function renderTable(filtered) {
     const table = document.getElementById('bases-table');
     const tbody = document.getElementById('bases-tbody');
-    const previewPane = document.getElementById('table-preview-pane');
-    const togglePreviewBtn = document.getElementById('btn-toggle-preview-inline');
 
     table.classList.toggle('is-compact', state.tableCompact);
-    previewPane.hidden = !state.tableShowPreview;
-    if (togglePreviewBtn) {
-      togglePreviewBtn.textContent = state.tableShowPreview ? 'Hide Preview Pane' : 'Show Preview Pane';
-    }
 
     document.getElementById('table-row-summary').textContent =
       `Showing ${filtered.length} of ${state.bases.length} bases`;
@@ -1034,7 +952,7 @@
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="12" style="padding:48px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><span>No matching bases found.</span><button type="button" class="btn-secondary btn-xs" data-reset-all-filters>Reset All Filters</button></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="padding:48px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><span>No matching bases found.</span><button type="button" class="btn-secondary btn-xs" data-reset-all-filters>Reset All Filters</button></div></td></tr>`;
       return;
     }
 
@@ -1042,14 +960,12 @@
       .map(base => {
         const st = normalizeStatus(base.status);
         const stLabel = STATUS_LABELS[st] || 'Scouted';
-        const tier = base.tier || 'medium';
         const nc = getNetherCoords(base);
         const dist = getDistanceFrom(base, state.origin.x, state.origin.z);
         const bearing = getBearing(state.origin.x, state.origin.z, base.x, base.z);
         const isSelected = state.selectedIds.has(base.id);
         const isFocused = state.focusedBaseId === base.id;
         const routeIdx = state.routeIds.indexOf(base.id);
-        const summary = base.containers || base.notes || '—';
         const xyzCopy = `${base.x} ${base.y} ${base.z}`;
         const netherCopy = nc ? `${nc.x} 128 ${nc.z}` : '';
 
@@ -1073,7 +989,7 @@
 
             <td data-name-cell="${escapeHtml(base.id)}">
               <div style="display:flex;align-items:center;gap:6px;">
-                <button type="button" class="row-title-btn" data-open-dossier="${escapeHtml(base.id)}" title="Inspect Dossier &amp; F3 Loupe">
+                <button type="button" class="row-title-btn" data-open-dossier="${escapeHtml(base.id)}" title="Edit owner &amp; coordinates">
                   <span class="status-dot dot-${st}"></span>
                   <span>${escapeHtml(base.name)}</span>
                 </button>
@@ -1082,7 +998,7 @@
                   class="btn-inline-rename"
                   data-inline-rename="${escapeHtml(base.id)}"
                   aria-label="Rename ${escapeHtml(base.name)} inline"
-                  title="Rename inline (F2)"
+                  title="Rename owner inline (F2)"
                 >✎</button>
                 ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
                 ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
@@ -1100,27 +1016,6 @@
                 <span class="status-dot dot-${st}"></span>
                 <span>${stLabel}</span>
               </button>
-            </td>
-
-            <td ${!state.tableColumns.tier ? 'hidden' : ''}>
-              <button
-                type="button"
-                class="tier-pill ${tier === 'high' ? 'tier-high' : ''}"
-                data-tier-picker="${escapeHtml(base.id)}"
-                title="Click to change Loot Tier"
-              >
-                ${TIER_LABELS[tier] || 'Med'} ▾
-              </button>
-            </td>
-
-            <td
-              class="editable-cell"
-              data-inline-edit="${escapeHtml(base.id)}"
-              data-edit-field="containers"
-              title="Double-click to edit loot summary inline"
-              ${!state.tableColumns.loot ? 'hidden' : ''}
-            >
-              ${escapeHtml(summary)}
             </td>
 
             <td class="num" ${!state.tableColumns.ow ? 'hidden' : ''}>
@@ -1142,16 +1037,11 @@
               <span style="color:var(--text-muted);margin-left:4px;">· ${bearing.cardinal} ${bearing.yawStr}</span>
             </td>
 
-            <td class="mono" style="color:var(--text-secondary);font-size:11.5px;" ${!state.tableColumns.meta ? 'hidden' : ''}>
-              ${escapeHtml((base.biome || '—').replace('minecraft:', ''))}
-            </td>
-
-            <td style="color:var(--text-secondary);font-size:12px;" ${!state.tableColumns.players ? 'hidden' : ''}>
-              ${escapeHtml((base.players || []).join(', ') || '—')}
-            </td>
-
             <td class="num">
               <div style="display:inline-flex;align-items:center;gap:4px;">
+                <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(xyzCopy)}" title="Copy XYZ coordinates">
+                  Copy XYZ
+                </button>
                 <button type="button" class="xaero-copy-btn" data-copy-xaero="${escapeHtml(base.id)}" title="Copy local Xaero waypoint file line">
                   Xaero
                 </button>
@@ -1175,72 +1065,6 @@
         `;
       })
       .join('');
-
-    renderTableSidePreview();
-  }
-
-  function renderTableSidePreview() {
-    if (!state.tableShowPreview) return;
-    const base = state.bases.find(b => b.id === state.focusedBaseId) || state.bases[0];
-    if (!base) return;
-
-    const st = normalizeStatus(base.status);
-    const stLabel = STATUS_LABELS[st] || 'Scouted';
-    const nc = getNetherCoords(base);
-    const dist = getDistanceFrom(base, state.origin.x, state.origin.z);
-    const bearing = getBearing(state.origin.x, state.origin.z, base.x, base.z);
-    const routeIdx = state.routeIds.indexOf(base.id);
-
-    document.getElementById('preview-plate').textContent = `PLATE ${base.plate || '01'}`;
-    document.getElementById('preview-name').textContent = base.name;
-    document.getElementById('preview-status-slot').innerHTML = `
-      <button type="button" class="status-tag is-${st}" data-status-picker="${escapeHtml(base.id)}">
-        <span class="status-dot dot-${st}"></span><span>${stLabel}</span>
-      </button>
-    `;
-
-    const imgEl = document.getElementById('preview-img');
-    imgEl.src = getPlateSrc(base.image);
-    document.getElementById('preview-image-wrap').dataset.openDossier = base.id;
-
-    document.getElementById('preview-specs').innerHTML = `
-      <div class="spec-row">
-        <span class="spec-key">OVERWORLD XYZ</span>
-        <span class="coord-xyz" data-copy="${base.x} ${base.y} ${base.z}">${base.x}, ${base.y}, ${base.z}</span>
-      </div>
-      <div class="spec-row">
-        <span class="spec-key">NETHER ROOF (÷8)</span>
-        ${
-          nc
-            ? `<span class="coord-nether" data-copy="${nc.x} 128 ${nc.z}">${nc.x}, 128, ${nc.z}</span>`
-            : `<span style="color:var(--text-muted);">The End</span>`
-        }
-      </div>
-      <div class="spec-row">
-        <span class="spec-key">VECTOR / F3 YAW</span>
-        <span>${formatNumber(dist.ow)}m · ${bearing.cardinal} (${bearing.yawStr})</span>
-      </div>
-      <div class="spec-row">
-        <span class="spec-key">BIOME</span>
-        <span>${escapeHtml((base.biome || '—').replace('minecraft:', ''))}</span>
-      </div>
-      <div class="spec-row">
-        <span class="spec-key">SPOTTED PLAYERS</span>
-        <span>${escapeHtml((base.players || []).join(', ') || '—')}</span>
-      </div>
-      <p style="font-size:12px;color:var(--text-secondary);line-height:1.45;margin-top:4px;">
-        ${escapeHtml(base.containers || '')}${base.notes ? ` — ${escapeHtml(base.notes)}` : ''}
-      </p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
-        <button type="button" class="btn-primary btn-sm" data-copy-xaero="${escapeHtml(base.id)}" title="Copy local Xaero waypoint file line">Copy Xaero</button>
-        <button type="button" class="btn-secondary btn-sm" data-toggle-route="${escapeHtml(base.id)}">
-          ${routeIdx !== -1 ? `In Route (#0${routeIdx + 1})` : '+ Add to Route'}
-        </button>
-      </div>
-      <button type="button" class="btn-secondary btn-sm" data-open-dossier="${escapeHtml(base.id)}" style="width:100%;">
-        Open Full Dossier &amp; F3 Loupe
-      </button>
-    `;
   }
 
   // ============================================================================
@@ -1480,8 +1304,6 @@
       const nc = getNetherCoords(base);
       const dist = getDistanceFrom(base, state.origin.x, state.origin.z);
       const bearing = getBearing(state.origin.x, state.origin.z, base.x, base.z);
-      const imgSrc = getPlateSrc(base.image);
-      const focusOrigin = base.cropFocus || '50% 50%';
       const inRoute = state.routeIds.includes(base.id);
 
       card.innerHTML = `
@@ -1492,20 +1314,12 @@
               <span class="status-dot dot-${st}"></span><span>${stLabel}</span>
             </button>
           </div>
-          <button type="button" class="btn-secondary btn-xs" data-open-dossier="${escapeHtml(base.id)}">Dossier</button>
+          <button type="button" class="btn-secondary btn-xs" data-open-dossier="${escapeHtml(base.id)}">Edit</button>
         </div>
 
-        ${
-          imgSrc
-            ? `<div class="card-media" data-open-dossier="${escapeHtml(base.id)}" style="border:1px solid var(--border-subtle);">
-                 <img src="${imgSrc}" alt="${escapeHtml(base.name)}" style="transform-origin:${escapeHtml(focusOrigin)};object-position:${escapeHtml(focusOrigin)};" />
-               </div>`
-            : ''
-        }
-
         <div class="nether-callout mono" style="font-size:11.5px;">
-          <div style="color:var(--text-primary);">OW: ${base.x}, ${base.y}, ${base.z}</div>
-          ${nc ? `<div>Nether (÷8): ${nc.x}, 128, ${nc.z}</div>` : `<div>Dimension: The End</div>`}
+          <div style="color:var(--text-primary);">OW: <span class="coord-xyz" data-copy="${base.x} ${base.y} ${base.z}">${base.x}, ${base.y}, ${base.z}</span></div>
+          ${nc ? `<div>Nether (÷8): <span class="coord-nether" data-copy="${nc.x} 128 ${nc.z}">${nc.x}, 128, ${nc.z}</span></div>` : `<div>Dimension: The End</div>`}
           <div style="color:var(--text-secondary);margin-top:2px;">Δ ${formatNumber(dist.ow)}m · Yaw ${bearing.cardinal} ${bearing.yawStr}</div>
         </div>
 
@@ -1703,7 +1517,6 @@
     const coordMode = document.getElementById('xaero-coord-mode')?.value || 'exact';
     const setName = document.getElementById('xaero-set-name')?.value || 'gui.xaero_default';
     const prefixPlate = document.getElementById('xaero-prefix-plate')?.checked ?? true;
-    const includeTier = document.getElementById('xaero-include-tier')?.checked ?? true;
     const disableRaided = document.getElementById('xaero-disable-raided')?.checked ?? true;
     const scope = document.getElementById('xaero-scope')?.value || 'unraided';
 
@@ -1715,7 +1528,6 @@
         wp: buildXaeroWaypointData(base, {
           indexPrefix,
           coordMode,
-          includeTier,
           setName,
           disableRaided
         })
@@ -1787,9 +1599,7 @@
             z,
             dimension,
             xaeroColor: Number.isNaN(color) ? 12 : color,
-            status,
-            tier: 'medium',
-            notes: 'Imported via Xaero waypoint string.'
+            status
           });
         }
       }
@@ -1823,7 +1633,7 @@
   }
 
   // ============================================================================
-  // DETAIL / EDIT DOSSIER MODAL & OPTICAL PRESETS
+  // EDIT BASE MODAL (OWNER & COORDINATES)
   // ============================================================================
 
   function updateDossierComputedPreview() {
@@ -1852,36 +1662,6 @@
     `;
   }
 
-  function applyDossierOpticalPreset(preset) {
-    document.querySelectorAll('#dossier-zoom-presets .seg-item').forEach(btn => {
-      btn.classList.toggle('is-active', btn.dataset.preset === preset);
-    });
-    const img = document.getElementById('dossier-img');
-    if (!img) return;
-
-    if (preset === 'full') {
-      state.dossierTransform = { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
-      img.style.transformOrigin = '50% 50%';
-    } else if (preset === 'subject') {
-      state.dossierTransform = { scale: 1.55, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
-      img.style.transformOrigin = '52% 52%';
-    } else if (preset === 'f3_left') {
-      state.dossierTransform = { scale: 2.35, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
-      img.style.transformOrigin = '6% 18%';
-    } else if (preset === 'f3_right') {
-      state.dossierTransform = { scale: 2.35, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
-      img.style.transformOrigin = '94% 22%';
-    }
-    updateDossierImageTransform();
-  }
-
-  function updateDossierImageTransform() {
-    const img = document.getElementById('dossier-img');
-    if (!img) return;
-    const { scale, x, y } = state.dossierTransform;
-    img.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
-  }
-
   function openDossier(baseId) {
     const base = state.bases.find(b => b.id === baseId);
     if (!base) return;
@@ -1894,39 +1674,28 @@
     const delBtn = document.getElementById('btn-delete-base');
     if (delBtn) {
       delBtn.classList.remove('is-confirming');
-      delBtn.textContent = 'Delete';
+      delBtn.textContent = 'Delete Base';
     }
 
-    document.getElementById('dossier-plate').textContent = `PLATE ${base.plate || '01'}`;
+    document.getElementById('dossier-plate').textContent = `#${base.plate || '01'}`;
     document.getElementById('dossier-title').textContent = base.name;
     document.getElementById('dossier-dim-badge').textContent = (base.dimension || 'overworld')
       .replace('minecraft:', '')
       .toUpperCase();
 
-    const imgEl = document.getElementById('dossier-img');
-    imgEl.src = getPlateSrc(base.image);
-    document.getElementById('dossier-file-meta').textContent =
-      `File: ${base.image || 'None'} · Scroll to zoom · Drag to pan`;
-
     document.getElementById('edit-name').value = base.name || '';
     document.getElementById('edit-status').value = normalizeStatus(base.status);
-    document.getElementById('edit-tier').value = base.tier || 'medium';
     document.getElementById('edit-dimension').value = base.dimension || 'overworld';
     document.getElementById('edit-color').value = String(base.xaeroColor ?? 12);
     document.getElementById('edit-x').value = base.x;
     document.getElementById('edit-y').value = base.y;
     document.getElementById('edit-z').value = base.z;
-    document.getElementById('edit-biome').value = base.biome || '';
-    document.getElementById('edit-players').value = (base.players || []).join(', ');
-    document.getElementById('edit-containers').value = base.containers || '';
-    document.getElementById('edit-notes').value = base.notes || '';
 
     const routeBtn = document.getElementById('dossier-toggle-route');
     const inRoute = state.routeIds.includes(base.id);
-    routeBtn.textContent = inRoute ? 'In Route (Remove)' : '+ Add to Route';
+    routeBtn.textContent = inRoute ? 'In Route (Remove)' : '+ Route';
 
     updateDossierComputedPreview();
-    applyDossierOpticalPreset('full');
     document.getElementById('dossier-modal').hidden = false;
   }
 
@@ -1937,7 +1706,7 @@
   }
 
   // ============================================================================
-  // SCOPED CONTEXT MENU & INLINE STATUS / TIER PICKERS
+  // SCOPED CONTEXT MENU & INLINE STATUS PICKER
   // ============================================================================
 
   function closeContextMenus() {
@@ -1983,9 +1752,19 @@
     menu.innerHTML = `
       <div class="ctx-section-label">${escapeHtml(base.plate || '')} · ${escapeHtml(base.name)}</div>
       <button type="button" class="ctx-item" data-ctx-action="dossier" data-id="${escapeHtml(base.id)}">
-        <span>Open Dossier &amp; F3 Loupe</span>
+        <span>Edit Owner &amp; Coordinates</span>
         <kbd class="kbd-token">↵</kbd>
       </button>
+      <button type="button" class="ctx-item" data-ctx-action="copy-xyz" data-id="${escapeHtml(base.id)}">
+        <span>Copy Overworld XYZ (${base.x}, ${base.y}, ${base.z})</span>
+      </button>
+      ${
+        nc
+          ? `<button type="button" class="ctx-item" data-ctx-action="copy-nether-xyz" data-id="${escapeHtml(base.id)}">
+               <span>Copy Nether Roof XYZ (${nc.x}, 128, ${nc.z})</span>
+             </button>`
+          : ''
+      }
       <button type="button" class="ctx-item" data-ctx-action="xaero-ow" data-id="${escapeHtml(base.id)}">
         <span>Copy Local Xaero Line (OW)</span>
         <kbd class="kbd-token">C</kbd>
@@ -1995,16 +1774,6 @@
           ? `<button type="button" class="ctx-item" data-ctx-action="xaero-nether" data-id="${escapeHtml(base.id)}">
                <span>Copy Local Nether Line (÷8)</span>
                <kbd class="kbd-token">N</kbd>
-             </button>`
-          : ''
-      }
-      <button type="button" class="ctx-item" data-ctx-action="copy-xyz" data-id="${escapeHtml(base.id)}">
-        <span>Copy Overworld XYZ (${base.x}, ${base.y}, ${base.z})</span>
-      </button>
-      ${
-        nc
-          ? `<button type="button" class="ctx-item" data-ctx-action="copy-nether-xyz" data-id="${escapeHtml(base.id)}">
-               <span>Copy Nether Roof XYZ (${nc.x}, 128, ${nc.z})</span>
              </button>`
           : ''
       }
@@ -2076,20 +1845,6 @@
               <span>${STATUS_LABELS[st]}</span>
             </span>
             ${normalizeStatus(base.status) === st ? '<span>✓</span>' : ''}
-          </button>
-        `
-          )
-          .join('')}
-      `;
-    } else if (type === 'tier') {
-      picker.innerHTML = `
-        <div class="ctx-section-label">Loot Tier — ${escapeHtml(base.name)}</div>
-        ${['high', 'medium', 'low']
-          .map(
-            t => `
-          <button type="button" class="ctx-item" data-ctx-tier="${t}" data-id="${escapeHtml(base.id)}">
-            <span>${TIER_LABELS[t]} Value</span>
-            ${(base.tier || 'medium') === t ? '<span>✓</span>' : ''}
           </button>
         `
           )
@@ -2197,19 +1952,19 @@
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Add New Base / Drop F3 Screenshot',
+        label: 'Add New Base (Owner & Coordinates)',
         sub: 'Shortcut: N',
         run: () => openIngestModal()
       },
       {
         group: 'Views & Filters',
-        label: 'Switch to Photo Grid View',
+        label: 'Switch to Coordinate Cards View',
         sub: 'Shortcut: 1',
         run: () => switchView('grid')
       },
       {
         group: 'Views & Filters',
-        label: 'Switch to Power Data Table View',
+        label: 'Switch to Coordinate Table View',
         sub: 'Shortcut: 2',
         run: () => switchView('table')
       },
@@ -2226,7 +1981,6 @@
         run: () => {
           state.filters.status = 'all';
           state.filters.query = '';
-          state.filters.tiers.clear();
           state.filters.dimensions.clear();
           state.filters.routeOnly = false;
           state.selectedIds.clear();
@@ -2251,10 +2005,10 @@
     const baseItems = state.bases.map(b => {
       const nc = getNetherCoords(b);
       return {
-        group: 'Cataloged Bases (Enter to Inspect)',
+        group: 'Cataloged Bases (Enter to Edit)',
         label: `${b.plate || ''} · ${b.name}`,
         sub: `OW: ${b.x}, ${b.y}, ${b.z}${nc ? ` · N: ${nc.x}, ${nc.z}` : ' · END'}`,
-        searchStr: `${b.plate} ${b.name} ${b.x} ${b.z} ${b.containers || ''} ${b.biome || ''}`.toLowerCase(),
+        searchStr: `${b.plate} ${b.name} ${b.x} ${b.y} ${b.z}`.toLowerCase(),
         run: () => openDossier(b.id)
       };
     });
@@ -2355,44 +2109,33 @@
   }
 
   // ============================================================================
-  // ADD BASE & F3 SCREENSHOT OCR
+  // ADD BASE MODAL (OWNER & COORDINATES)
   // ============================================================================
 
   function updateNewBaseNetherPreview() {
-    const x = Number(document.getElementById('new-x').value);
-    const z = Number(document.getElementById('new-z').value);
+    const xRaw = document.getElementById('new-x').value;
+    const zRaw = document.getElementById('new-z').value;
     const dim = document.getElementById('new-dimension').value;
     const el = document.getElementById('new-nether-preview');
     if (dim === 'the_end') {
       el.textContent = 'Dimension: The End (No Nether Portal link)';
       return;
     }
-    if (!Number.isNaN(x) && !Number.isNaN(z)) {
+    const x = Number(xRaw);
+    const z = Number(zRaw);
+    if (xRaw !== '' && zRaw !== '' && !Number.isNaN(x) && !Number.isNaN(z)) {
       el.textContent = `Nether Roof Portal (÷8): ${Math.floor(x / 8)}, 128, ${Math.floor(z / 8)}`;
+    } else {
+      el.textContent = 'Nether Roof Portal (÷8): —';
     }
   }
 
-  function openIngestModal(prefillFile = null) {
+  function openIngestModal() {
     state.lastFocusedElement = document.activeElement;
     document.getElementById('ingest-form').reset();
-    state.pendingUploadFilename = '';
-    document.getElementById('ingest-preview-img').hidden = true;
-    document.getElementById('ingest-preview-empty').hidden = false;
-    document.getElementById('ocr-status-text').textContent =
-      'Optional — automatically reads player name, Block XYZ, Dimension & Biome';
+    updateNewBaseNetherPreview();
     document.getElementById('ingest-modal').hidden = false;
-
-    if (prefillFile) {
-      state.pendingUploadFilename = prefillFile;
-      const baseName = prefillFile.replace(/\.[^.]+$/, '');
-      document.getElementById('new-name').value = baseName;
-      document.getElementById('new-players').value = baseName;
-      const imgEl = document.getElementById('ingest-preview-img');
-      imgEl.src = getPlateSrc(prefillFile);
-      imgEl.hidden = false;
-      document.getElementById('ingest-preview-empty').hidden = true;
-      imgEl.onload = () => runOpticalF3Extraction(imgEl);
-    }
+    document.getElementById('new-name').focus();
   }
 
   function closeIngestModal() {
@@ -2400,85 +2143,28 @@
     state.lastFocusedElement?.focus?.();
   }
 
-  async function handleFileDropOrSelect(file) {
-    if (!file) return;
-    openIngestModal();
+  function bindSmartCoordPaste(xId, yId, zId, onUpdate) {
+    const xEl = document.getElementById(xId);
+    const yEl = document.getElementById(yId);
+    const zEl = document.getElementById(zId);
+    if (!xEl || !yEl || !zEl) return;
 
-    const baseName = file.name.replace(/\.[^.]+$/, '');
-    document.getElementById('new-name').value = baseName;
-    document.getElementById('new-players').value = baseName;
-    document.getElementById('ocr-status-text').textContent = 'Reading coordinates from screenshot...';
-
-    const reader = new FileReader();
-    reader.onload = async e => {
-      const dataUrl = e.target.result;
-      const imgEl = document.getElementById('ingest-preview-img');
-      imgEl.src = dataUrl;
-      imgEl.hidden = false;
-      document.getElementById('ingest-preview-empty').hidden = true;
-
-      try {
-        const res = await fetch(`${state.apiBase}/api/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name, dataUrl })
-        });
-        if (res.ok) {
-          const uploaded = await res.json();
-          state.pendingUploadFilename = uploaded.filename;
+    xEl.addEventListener('paste', e => {
+      const text = e.clipboardData?.getData('text') || '';
+      const nums = text.match(/[+-]?\d+(?:\.\d+)?/g);
+      if (nums && nums.length >= 2) {
+        e.preventDefault();
+        if (nums.length >= 3) {
+          xEl.value = Math.round(Number(nums[0]));
+          yEl.value = Math.round(Number(nums[1]));
+          zEl.value = Math.round(Number(nums[2]));
+        } else {
+          xEl.value = Math.round(Number(nums[0]));
+          zEl.value = Math.round(Number(nums[1]));
         }
-      } catch {}
-
-      imgEl.onload = () => runOpticalF3Extraction(imgEl);
-    };
-    reader.readAsDataURL(file);
-  }
-
-  async function runOpticalF3Extraction(imgElement) {
-    try {
-      if (!window.Tesseract) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          s.onload = resolve;
-          s.onerror = reject;
-          document.head.appendChild(s);
-        });
+        onUpdate?.();
       }
-
-      const offCanvas = document.createElement('canvas');
-      const cropW = Math.floor((imgElement.naturalWidth || 1920) * 0.36);
-      const cropH = Math.floor((imgElement.naturalHeight || 1080) * 0.62);
-      offCanvas.width = cropW;
-      offCanvas.height = cropH;
-      const ctx = offCanvas.getContext('2d');
-      ctx.drawImage(imgElement, 0, 0, cropW, cropH, 0, 0, cropW, cropH);
-
-      const result = await window.Tesseract.recognize(offCanvas, 'eng');
-      const text = result?.data?.text || '';
-
-      const blockMatch = text.match(/Block:\s*([+-]?\d+)\s+([+-]?\d+)\s+([+-]?\d+)/i);
-      if (blockMatch) {
-        document.getElementById('new-x').value = parseInt(blockMatch[1], 10);
-        document.getElementById('new-y').value = parseInt(blockMatch[2], 10);
-        document.getElementById('new-z').value = parseInt(blockMatch[3], 10);
-      } else {
-        const xyzMatch = text.match(/XYZ:\s*([+-]?\d+)[.,]\d+\s+([+-]?\d+)[.,]\d+\s+([+-]?\d+)/i);
-        if (xyzMatch) {
-          document.getElementById('new-x').value = parseInt(xyzMatch[1], 10);
-          document.getElementById('new-y').value = parseInt(xyzMatch[2], 10);
-          document.getElementById('new-z').value = parseInt(xyzMatch[3], 10);
-        }
-      }
-
-      if (/the_end/i.test(text)) document.getElementById('new-dimension').value = 'the_end';
-      else if (/the_nether/i.test(text)) document.getElementById('new-dimension').value = 'the_nether';
-
-      const biomeMatch = text.match(/Biome:\s*(?:minecraft:)?([a-z0-9_]+)/i);
-      if (biomeMatch) document.getElementById('new-biome').value = biomeMatch[1].toLowerCase();
-
-      updateNewBaseNetherPreview();
-    } catch {}
+    });
   }
 
   // ============================================================================
@@ -2550,7 +2236,7 @@
   }
 
   // ============================================================================
-  // INLINE TABLE CELL EDITING
+  // INLINE TABLE CELL EDITING (OWNER RENAME)
   // ============================================================================
 
   function startInlineEdit(td, baseId, field) {
@@ -2689,13 +2375,6 @@
     });
 
     // Faceted Filter Checkboxes
-    document.querySelectorAll('input[data-facet="tier"]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        if (cb.checked) state.filters.tiers.add(cb.value);
-        else state.filters.tiers.delete(cb.value);
-        renderAll();
-      });
-    });
     document.querySelectorAll('input[data-facet="dimension"]').forEach(cb => {
       cb.addEventListener('change', () => {
         if (cb.checked) state.filters.dimensions.add(cb.value);
@@ -2709,7 +2388,6 @@
     });
 
     const resetFacets = () => {
-      state.filters.tiers.clear();
       state.filters.dimensions.clear();
       state.filters.routeOnly = false;
       document.querySelectorAll('#popover-facets input[type="checkbox"]').forEach(cb => {
@@ -2729,15 +2407,6 @@
       e.currentTarget.textContent = state.sortDir === 1 ? '↑ ASC' : '↓ DESC';
       renderAll();
     });
-    document.getElementById('toggle-crop-mode').addEventListener('click', e => {
-      const btn = e.target.closest('.seg-item');
-      if (!btn) return;
-      state.cropMode = btn.dataset.crop;
-      document
-        .querySelectorAll('#toggle-crop-mode .seg-item')
-        .forEach(b => b.classList.toggle('is-active', b === btn));
-      renderAll();
-    });
     document.getElementById('toggle-card-vectors').addEventListener('change', e => {
       state.showCardVectors = e.target.checked;
       renderAll();
@@ -2749,15 +2418,6 @@
         state.tableColumns[cb.dataset.col] = cb.checked;
         renderAll();
       });
-    });
-    document.getElementById('toggle-table-preview').addEventListener('change', e => {
-      state.tableShowPreview = e.target.checked;
-      renderAll();
-    });
-    document.getElementById('btn-toggle-preview-inline').addEventListener('click', () => {
-      state.tableShowPreview = !state.tableShowPreview;
-      document.getElementById('toggle-table-preview').checked = state.tableShowPreview;
-      renderAll();
     });
     document.getElementById('toggle-table-compact').addEventListener('change', e => {
       state.tableCompact = e.target.checked;
@@ -2809,10 +2469,9 @@
       syncSelectionStateDOM();
     });
 
-    // Table Row Hover -> Live Preview Update & Double-Click Inline Edit
+    // Table Row Hover Focus
     const tbody = document.getElementById('bases-tbody');
     tbody.addEventListener('mouseover', e => {
-      // Do not jump row focus while a floating dropdown/context menu or inline input is open
       if (
         !document.getElementById('context-menu').hidden ||
         !document.getElementById('inline-picker').hidden ||
@@ -2824,15 +2483,7 @@
       if (tr && state.focusedBaseId !== tr.dataset.baseId) {
         state.focusedBaseId = tr.dataset.baseId;
         document.querySelectorAll('#bases-tbody tr').forEach(r => r.classList.toggle('is-focused', r === tr));
-        renderTableSidePreview();
       }
-    });
-
-    tbody.addEventListener('dblclick', e => {
-      const cell = e.target.closest('[data-inline-edit]');
-      if (!cell) return;
-      e.preventDefault();
-      startInlineEdit(cell, cell.dataset.inlineEdit, cell.dataset.editField);
     });
 
     // Table Keyboard Navigation (including F2 for inline rename)
@@ -2883,14 +2534,6 @@
         showToast(`Updated ${ids.length} bases → ${STATUS_LABELS[st]}`);
       });
     });
-    document.querySelectorAll('[data-bulk-tier]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const tier = btn.dataset.bulkTier;
-        const ids = [...state.selectedIds];
-        await bulkUpdateBases(ids, { tier });
-        showToast(`Updated ${ids.length} bases → ${TIER_LABELS[tier]} Tier`);
-      });
-    });
     document.getElementById('btn-bulk-route').addEventListener('click', () => {
       let added = 0;
       state.selectedIds.forEach(id => {
@@ -2906,7 +2549,7 @@
       const lines = [...state.selectedIds]
         .map(id => state.bases.find(b => b.id === id))
         .filter(Boolean)
-        .map(b => buildXaeroWaypointData(b, { indexPrefix: b.plate, includeTier: true }).fileLine);
+        .map(b => buildXaeroWaypointData(b, { indexPrefix: b.plate }).fileLine);
       copyText(lines.join('\n'), `Copied ${lines.length} local Xaero lines`, e.currentTarget);
     });
     document.getElementById('btn-bulk-delete').addEventListener('click', async e => {
@@ -2962,8 +2605,7 @@
       const lines = stops.map((b, i) =>
         buildXaeroWaypointData(b, {
           indexPrefix: String(i + 1).padStart(2, '0'),
-          coordMode: 'exact',
-          includeTier: true
+          coordMode: 'exact'
         }).fileLine
       );
       copyText(lines.join('\n'), `Copied ${lines.length} local Xaero route lines`, e.currentTarget);
@@ -2975,8 +2617,7 @@
       const lines = stops.map((b, i) => {
         const wp = buildXaeroWaypointData(b, {
           indexPrefix: String(i + 1).padStart(2, '0'),
-          coordMode: 'nether_roof',
-          includeTier: false
+          coordMode: 'nether_roof'
         });
         return `${String(i + 1).padStart(2, '0')}. ${b.name}: ${wp.coordsText}`;
       });
@@ -3000,12 +2641,10 @@
         state.lastFocusedElement?.focus?.();
       }
     });
-    ['xaero-scope', 'xaero-coord-mode', 'xaero-set-name', 'xaero-prefix-plate', 'xaero-include-tier', 'xaero-disable-raided'].forEach(
-      id => {
-        document.getElementById(id)?.addEventListener('input', renderXaeroStudio);
-        document.getElementById(id)?.addEventListener('change', renderXaeroStudio);
-      }
-    );
+    ['xaero-scope', 'xaero-coord-mode', 'xaero-set-name', 'xaero-prefix-plate', 'xaero-disable-raided'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', renderXaeroStudio);
+      document.getElementById(id)?.addEventListener('change', renderXaeroStudio);
+    });
     document.getElementById('btn-copy-all-coords')?.addEventListener('click', e => {
       const list = getXaeroScopeBases();
       const coordMode = document.getElementById('xaero-coord-mode')?.value || 'exact';
@@ -3129,7 +2768,7 @@
       openContextMenu(target.dataset.baseId, e.clientX, e.clientY);
     });
 
-    // Capture-phase Outside Pointerdown & Scroll Dismissal (Never bypassed by stopPropagation)
+    // Capture-phase Outside Pointerdown & Scroll Dismissal
     document.addEventListener(
       'pointerdown',
       e => {
@@ -3189,11 +2828,6 @@
         if (token === 'route') {
           state.filters.routeOnly = false;
           document.getElementById('facet-route-only').checked = false;
-        } else if (token.startsWith('tier:')) {
-          const v = token.split(':')[1];
-          state.filters.tiers.delete(v);
-          const cb = document.querySelector(`input[data-facet="tier"][value="${v}"]`);
-          if (cb) cb.checked = false;
         } else if (token.startsWith('dim:')) {
           const v = token.split(':')[1];
           state.filters.dimensions.delete(v);
@@ -3208,7 +2842,7 @@
         return;
       }
 
-      // Row / Card Selection (with Shift+Click range selection & zero-reflow DOM sync)
+      // Row / Card Selection (with Shift+Click range selection)
       const selectChipBtn = e.target.closest('[data-select-chip]');
       const selectInput = e.target.closest('input[data-select-id]');
       if (selectChipBtn || selectInput) {
@@ -3275,14 +2909,6 @@
         return;
       }
 
-      // Tier Picker
-      const tierBtn = e.target.closest('[data-tier-picker]');
-      if (tierBtn) {
-        e.stopPropagation();
-        openInlinePicker('tier', tierBtn.dataset.tierPicker, tierBtn);
-        return;
-      }
-
       // Context Menu / Inline Picker Actions
       const ctxStatus = e.target.closest('[data-ctx-status]');
       if (ctxStatus) {
@@ -3291,16 +2917,6 @@
         closeContextMenus();
         const updated = await updateBase(id, { status: st });
         if (updated) showToast(`${updated.name} → ${STATUS_LABELS[st]}`);
-        return;
-      }
-
-      const ctxTier = e.target.closest('[data-ctx-tier]');
-      if (ctxTier) {
-        const id = ctxTier.dataset.id;
-        const tier = ctxTier.dataset.ctxTier;
-        closeContextMenus();
-        const updated = await updateBase(id, { tier });
-        if (updated) showToast(`${updated.name} → ${TIER_LABELS[tier]} Tier`);
         return;
       }
 
@@ -3408,23 +3024,17 @@
         e.stopPropagation();
         const base = state.bases.find(b => b.id === xaeroBtn.dataset.copyXaero);
         if (!base) return;
-        const wp = buildXaeroWaypointData(base, { indexPrefix: base.plate, includeTier: true });
+        const wp = buildXaeroWaypointData(base, { indexPrefix: base.plate });
         await copyText(wp.fileLine, `Copied local Xaero line for ${base.name}`, xaeroBtn, '✓ Copied');
         return;
       }
 
-      // Open Dossier
+      // Open Edit Base Modal
       const dossierTrigger = e.target.closest('[data-open-dossier]');
       if (dossierTrigger) {
         e.stopPropagation();
         openDossier(dossierTrigger.dataset.openDossier);
         return;
-      }
-
-      // Untracked File Ingest
-      const ingestFileBtn = e.target.closest('[data-ingest-file]');
-      if (ingestFileBtn) {
-        openIngestModal(ingestFileBtn.dataset.ingestFile);
       }
     });
 
@@ -3547,50 +3157,16 @@
       drawMapCanvas();
     });
 
-    // Dossier Modal Events
+    // Edit Base Modal Events
     document.getElementById('dossier-close').addEventListener('click', closeDossier);
     document.getElementById('dossier-modal').addEventListener('click', e => {
       if (e.target.id === 'dossier-modal') closeDossier();
-    });
-    document.getElementById('dossier-zoom-presets').addEventListener('click', e => {
-      const btn = e.target.closest('.seg-item');
-      if (btn) applyDossierOpticalPreset(btn.dataset.preset);
     });
     ['edit-x', 'edit-y', 'edit-z', 'edit-dimension'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', updateDossierComputedPreview);
       document.getElementById(id)?.addEventListener('change', updateDossierComputedPreview);
     });
-
-    const viewport = document.getElementById('dossier-viewport');
-    viewport.addEventListener(
-      'wheel',
-      e => {
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
-        state.dossierTransform.scale = Math.max(1, Math.min(5, state.dossierTransform.scale * factor));
-        updateDossierImageTransform();
-      },
-      { passive: false }
-    );
-    viewport.addEventListener('dblclick', () => applyDossierOpticalPreset('full'));
-    viewport.addEventListener('mousedown', e => {
-      state.dossierTransform.isDragging = true;
-      viewport.classList.add('is-dragging');
-      state.dossierTransform.startX = e.clientX - state.dossierTransform.x;
-      state.dossierTransform.startY = e.clientY - state.dossierTransform.y;
-    });
-    window.addEventListener('mousemove', e => {
-      if (!state.dossierTransform.isDragging) return;
-      state.dossierTransform.x = e.clientX - state.dossierTransform.startX;
-      state.dossierTransform.y = e.clientY - state.dossierTransform.startY;
-      updateDossierImageTransform();
-    });
-    window.addEventListener('mouseup', () => {
-      if (state.dossierTransform.isDragging) {
-        state.dossierTransform.isDragging = false;
-        viewport.classList.remove('is-dragging');
-      }
-    });
+    bindSmartCoordPaste('edit-x', 'edit-y', 'edit-z', updateDossierComputedPreview);
 
     const navigateDossier = dir => {
       const list = getFilteredBases();
@@ -3603,20 +3179,24 @@
     document.getElementById('dossier-next').addEventListener('click', () => navigateDossier(1));
 
     document.getElementById('dossier-copy-xyz').addEventListener('click', e => {
-      const b = state.bases.find(item => item.id === state.dossierBaseId);
-      if (b) copyText(`${b.x} ${b.y} ${b.z}`, `Copied ${b.x} ${b.y} ${b.z}`, e.currentTarget);
+      const x = Number(document.getElementById('edit-x').value) || 0;
+      const y = Number(document.getElementById('edit-y').value) || 0;
+      const z = Number(document.getElementById('edit-z').value) || 0;
+      copyText(`${x} ${y} ${z}`, `Copied ${x} ${y} ${z}`, e.currentTarget);
     });
     document.getElementById('dossier-copy-nether').addEventListener('click', e => {
-      const b = state.bases.find(item => item.id === state.dossierBaseId);
-      if (!b) return;
-      const nc = getNetherCoords(b);
+      const x = Number(document.getElementById('edit-x').value) || 0;
+      const y = Number(document.getElementById('edit-y').value) || 0;
+      const z = Number(document.getElementById('edit-z').value) || 0;
+      const dim = document.getElementById('edit-dimension').value || 'overworld';
+      const nc = getNetherCoords({ x, y, z, dimension: dim });
       if (nc) copyText(`${nc.x} 128 ${nc.z}`, `Copied Nether ${nc.x} 128 ${nc.z}`, e.currentTarget);
     });
     document.getElementById('dossier-copy-xaero').addEventListener('click', e => {
       const b = state.bases.find(item => item.id === state.dossierBaseId);
       if (b) {
         copyText(
-          buildXaeroWaypointData(b, { indexPrefix: b.plate, includeTier: true }).fileLine,
+          buildXaeroWaypointData(b, { indexPrefix: b.plate }).fileLine,
           `Copied local Xaero line for ${b.name}`,
           e.currentTarget
         );
@@ -3643,16 +3223,11 @@
       const patch = {
         name: document.getElementById('edit-name').value.trim(),
         status: document.getElementById('edit-status').value,
-        tier: document.getElementById('edit-tier').value,
         dimension: document.getElementById('edit-dimension').value,
         xaeroColor: Number(document.getElementById('edit-color').value),
         x: Number(document.getElementById('edit-x').value),
         y: Number(document.getElementById('edit-y').value),
-        z: Number(document.getElementById('edit-z').value),
-        biome: document.getElementById('edit-biome').value.trim(),
-        players: document.getElementById('edit-players').value,
-        containers: document.getElementById('edit-containers').value.trim(),
-        notes: document.getElementById('edit-notes').value.trim()
+        z: Number(document.getElementById('edit-z').value)
       };
       const updated = await updateBase(state.dossierBaseId, patch);
       if (updated) {
@@ -3672,7 +3247,7 @@
       });
     });
 
-    // Add Base Modal & Global Drag-and-Drop
+    // Add Base Modal
     document.getElementById('btn-open-ingest').addEventListener('click', () => openIngestModal());
     document.getElementById('ingest-close').addEventListener('click', closeIngestModal);
     document.getElementById('ingest-cancel').addEventListener('click', closeIngestModal);
@@ -3683,33 +3258,7 @@
       document.getElementById(id)?.addEventListener('input', updateNewBaseNetherPreview);
       document.getElementById(id)?.addEventListener('change', updateNewBaseNetherPreview);
     });
-    document.getElementById('ingest-file-input').addEventListener('change', e => {
-      const f = e.target.files?.[0];
-      if (f) handleFileDropOrSelect(f);
-    });
-
-    let dragCounter = 0;
-    const dropOverlay = document.getElementById('dropzone-overlay');
-    window.addEventListener('dragenter', e => {
-      if (e.dataTransfer?.types?.includes('Files')) {
-        dragCounter++;
-        dropOverlay.hidden = false;
-      }
-    });
-    window.addEventListener('dragleave', () => {
-      dragCounter = Math.max(0, dragCounter - 1);
-      if (dragCounter === 0) dropOverlay.hidden = true;
-    });
-    window.addEventListener('dragover', e => e.preventDefault());
-    window.addEventListener('drop', e => {
-      e.preventDefault();
-      dragCounter = 0;
-      dropOverlay.hidden = true;
-      const file = e.dataTransfer?.files?.[0];
-      if (file && file.type.startsWith('image/')) {
-        handleFileDropOrSelect(file);
-      }
-    });
+    bindSmartCoordPaste('new-x', 'new-y', 'new-z', updateNewBaseNetherPreview);
 
     document.getElementById('ingest-form').addEventListener('submit', async e => {
       e.preventDefault();
@@ -3719,13 +3268,7 @@
         x: Number(document.getElementById('new-x').value),
         y: Number(document.getElementById('new-y').value),
         z: Number(document.getElementById('new-z').value),
-        dimension: document.getElementById('new-dimension').value,
-        tier: document.getElementById('new-tier').value,
-        biome: document.getElementById('new-biome').value.trim() || 'unknown',
-        players: document.getElementById('new-players').value,
-        containers: document.getElementById('new-containers').value.trim(),
-        notes: document.getElementById('new-notes').value.trim(),
-        image: state.pendingUploadFilename || ''
+        dimension: document.getElementById('new-dimension').value
       });
       if (created) {
         closeIngestModal();
