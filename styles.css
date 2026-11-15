@@ -137,6 +137,8 @@ button {
   align-items: baseline;
   gap: 12px;
   flex-wrap: wrap;
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .site-title {
@@ -188,7 +190,40 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
+
+/* Projection-mode dot: always occupies space, only its colour changes (no reflow) */
+#coord-mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#coord-mode-indicator::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--border-strong);
+  transition: background-color 0.12s ease;
+}
+
+#btn-toggle-nether-pop.is-nether-mode #coord-mode-indicator {
+  color: var(--accent-nether);
+}
+
+#btn-toggle-nether-pop.is-nether-mode #coord-mode-indicator::before {
+  background-color: var(--accent-nether);
+}
+
+@media (max-width: 760px) {
+  .header-actions {
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
 }
 
 /* ==========================================================================

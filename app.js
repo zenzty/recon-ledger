@@ -139,7 +139,7 @@
     const sortSel = document.getElementById('sort-select');
     if (sortSel) sortSel.value = state.sortBy;
     const sortDirBtn = document.getElementById('btn-sort-dir');
-    if (sortDirBtn) sortDirBtn.textContent = state.sortDir === 1 ? 'â†‘ ASC' : 'â†“ DESC';
+    if (sortDirBtn) sortDirBtn.textContent = state.sortDir === 1 ? '↑ ASC' : '↓ DESC';
 
     const vecCb = document.getElementById('toggle-card-vectors');
     if (vecCb) vecCb.checked = state.showCardVectors;
@@ -191,17 +191,17 @@
   }
 
   /**
-   * Computes Minecraft's exact F3 Rotation Yaw (-180Â° to +180Â°) and compass octant.
-   * In Minecraft: +Z = South (0Â°), -X = West (+90Â°), -Z = North (Â±180Â°), +X = East (-90Â°)
+   * Computes Minecraft's exact F3 Rotation Yaw (-180° to +180°) and compass octant.
+   * In Minecraft: +Z = South (0°), -X = West (+90°), -Z = North (±180°), +X = East (-90°)
    */
   function getBearing(fromX, fromZ, toX, toZ) {
     const dx = toX - fromX;
     const dz = toZ - fromZ;
     if (dx === 0 && dz === 0) {
-      return { yaw: 0, yawStr: '0.0Â°', cardinal: 'ORIGIN' };
+      return { yaw: 0, yawStr: '0.0°', cardinal: 'ORIGIN' };
     }
     const yaw = Math.atan2(-dx, dz) * (180 / Math.PI);
-    const yawStr = (yaw >= 0 ? '+' : '') + yaw.toFixed(1) + 'Â°';
+    const yawStr = (yaw >= 0 ? '+' : '') + yaw.toFixed(1) + '°';
     const compassDeg = (Math.atan2(dx, -dz) * (180 / Math.PI) + 360) % 360;
     const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
     const cardinal = dirs[Math.round(compassDeg / 45) % 8];
@@ -322,7 +322,7 @@
     return false;
   }
 
-  function flashInlineCopied(el, tempText = 'âś“ Copied') {
+  function flashInlineCopied(el, tempText = '✓ Copied') {
     if (!el) return;
     if (!el.dataset.origText) {
       el.dataset.origText = el.textContent;
@@ -338,7 +338,7 @@
     }, 1350);
   }
 
-  async function copyText(text, label = 'Copied to clipboard', triggerEl = null, inlineLabel = 'âś“ Copied') {
+  async function copyText(text, label = 'Copied to clipboard', triggerEl = null, inlineLabel = '✓ Copied') {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -604,7 +604,7 @@
             boxSpan,
             chunkDist,
             ownerRel,
-            reason: `Coordinates are ${dist2D === 0 ? 'identical' : `within ${dist2D} blocks`} (Î”X: ${dx}, Î”Y: ${dy}, Î”Z: ${dz}).`
+            reason: `Coordinates are ${dist2D === 0 ? 'identical' : `within ${dist2D} blocks`} (ΔX: ${dx}, ΔY: ${dy}, ΔZ: ${dz}).`
           });
           continue;
         }
@@ -642,7 +642,7 @@
             boxSpan,
             chunkDist,
             ownerRel,
-            reason: `${dist2D} blocks away (${chunkDist} chunk${chunkDist === 1 ? '' : 's'}) â€” within the typical footprint of a single base structure.`
+            reason: `${dist2D} blocks away (${chunkDist} chunk${chunkDist === 1 ? '' : 's'}) — within the typical footprint of a single base structure.`
           });
           continue;
         }
@@ -663,8 +663,8 @@
             chunkDist,
             ownerRel,
             reason: isSameOwner
-              ? `Matching owner (${existing.name}) ${dist2D} blocks away (${chunkDist} chunks) â€” likely part of the same compound or an updated coordinate reading.`
-              : `${dist2D} blocks away (Î”X: ${dx}, Î”Z: ${dz} Â· ${chunkDist} chunks) â€” within medium/large base perimeter.`
+              ? `Matching owner (${existing.name}) ${dist2D} blocks away (${chunkDist} chunks) — likely part of the same compound or an updated coordinate reading.`
+              : `${dist2D} blocks away (ΔX: ${dx}, ΔZ: ${dz} · ${chunkDist} chunks) — within medium/large base perimeter.`
           });
           continue;
         }
@@ -846,7 +846,7 @@
       `<option value="0,0">World Spawn (0, 0)</option>`,
       ...state.bases
         .filter(b => b.dimension !== 'the_end')
-        .map(b => `<option value="${b.x},${b.z}">${escapeHtml(b.plate)} Â· ${escapeHtml(b.name)} (${b.x}, ${b.z})</option>`)
+        .map(b => `<option value="${b.x},${b.z}">${escapeHtml(b.plate)} · ${escapeHtml(b.name)} (${b.x}, ${b.z})</option>`)
     ];
     sel.innerHTML = options.join('');
     if ([...sel.options].some(o => o.value === currentVal)) {
@@ -863,7 +863,7 @@
 
     const parts = [`${total} cataloged`, `${priority} priority`, `${scouted} scouted`];
     if (raided > 0) parts.push(`${raided} raided`);
-    document.getElementById('header-summary').textContent = parts.join(' Â· ');
+    document.getElementById('header-summary').textContent = parts.join(' · ');
 
     document.getElementById('active-origin-pill').textContent = `Origin: ${state.origin.label}`;
 
@@ -884,9 +884,15 @@
     routeBadge.textContent = state.routeIds.length;
     routeBadge.classList.toggle('has-items', state.routeIds.length > 0);
 
-    // Coordinate mode indicator
-    document.getElementById('coord-mode-indicator').textContent =
-      state.globalCoordMode === 'nether' ? 'Mode: Nether Ă·8' : 'Nether Ă·8';
+    // Coordinate mode indicator — fixed-width label; mode shown via dot/colour so the
+    // header never reflows when the projection is toggled.
+    const isNetherMode = state.globalCoordMode === 'nether';
+    const netherBtn = document.getElementById('btn-toggle-nether-pop');
+    if (netherBtn) {
+      netherBtn.classList.toggle('is-nether-mode', isNetherMode);
+      netherBtn.title = `Nether Roof (÷8) Converter & Vector Origin — display: ${isNetherMode ? 'Nether ÷8' : 'Overworld'} (Shortcut: C)`;
+    }
+    document.getElementById('coord-mode-indicator').textContent = 'Nether ÷8';
 
     renderActiveFacetChips();
     renderBulkActionBar();
@@ -900,12 +906,12 @@
     state.filters.dimensions.forEach(d => {
       const label = d === 'the_end' ? 'The End' : d === 'the_nether' ? 'Nether' : 'Overworld';
       chips.push(
-        `<span class="filter-chip">Dim: ${label} <button type="button" data-remove-facet="dim:${d}" aria-label="Remove dimension filter">Ă—</button></span>`
+        `<span class="filter-chip">Dim: ${label} <button type="button" data-remove-facet="dim:${d}" aria-label="Remove dimension filter">×</button></span>`
       );
     });
     if (state.filters.routeOnly) {
       chips.push(
-        `<span class="filter-chip">In Route (${state.routeIds.length}) <button type="button" data-remove-facet="route" aria-label="Remove route filter">Ă—</button></span>`
+        `<span class="filter-chip">In Route (${state.routeIds.length}) <button type="button" data-remove-facet="route" aria-label="Remove route filter">×</button></span>`
       );
     }
 
@@ -943,7 +949,7 @@
         chip.classList.toggle('is-checked', selected);
         chip.setAttribute('aria-pressed', String(selected));
         const box = chip.querySelector('.select-box-icon');
-        if (box) box.textContent = selected ? 'âś“' : '';
+        if (box) box.textContent = selected ? '✓' : '';
       }
     });
 
@@ -1012,7 +1018,7 @@
       if (state.bases.length === 0) {
         grid.innerHTML = `
           <div style="grid-column:1/-1;padding:72px 20px;text-align:center;color:var(--text-secondary);background:var(--bg-surface-1);border:1px dashed var(--border-default);display:flex;flex-direction:column;align-items:center;gap:12px;">
-            <strong style="font-size:15px;color:var(--text-primary);">Database is empty â€” ready for manual base entries</strong>
+            <strong style="font-size:15px;color:var(--text-primary);">Database is empty — ready for manual base entries</strong>
             <div style="font-size:12.5px;color:var(--text-muted);max-width:440px;line-height:1.5;">
               Add bases by owner and coordinates. Intelligent duplicate &amp; proximity detection will automatically check for overlapping or nearby entries before saving.
             </div>
@@ -1061,7 +1067,7 @@
 
         const netherCellHtml = `
           <div class="card-coord-cell">
-            <span class="card-coord-label">NETHER ROOF (Ă·8)</span>
+            <span class="card-coord-label">NETHER ROOF (÷8)</span>
             ${
               nc
                 ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof portal coordinates (${escapeHtml(netherCopy)})">
@@ -1093,7 +1099,7 @@
                     aria-label="Select ${escapeHtml(base.name)}"
                     title="Select for bulk editing (Shift+Click for range)"
                   >
-                    <span class="select-box-icon" aria-hidden="true">${isSelected ? 'âś“' : ''}</span>
+                    <span class="select-box-icon" aria-hidden="true">${isSelected ? '✓' : ''}</span>
                   </button>
                   <span class="card-plate-idx">#${escapeHtml(base.plate || '01')}</span>
                   <h2 class="card-title" data-open-dossier="${escapeHtml(base.id)}" title="Click to edit ${escapeHtml(base.name)}">${escapeHtml(base.name)}</h2>
@@ -1125,7 +1131,7 @@
                     data-open-ctx="${escapeHtml(base.id)}"
                     aria-label="More actions for ${escapeHtml(base.name)}"
                     title="More actions (Right-click anywhere on card)"
-                  >â‹Ż</button>
+                  >⋯</button>
                 </div>
               </div>
 
@@ -1137,7 +1143,7 @@
                 ${
                   state.showCardVectors
                     ? `<div class="card-vector-line" title="Distance and F3 heading yaw from active Origin">
-                         Î” ${formatNumber(dist.ow)}m${dist.nether !== null ? ` (${formatNumber(dist.nether)}m N)` : ''} Â· ${bearing.cardinal} ${bearing.yawStr}
+                         Δ ${formatNumber(dist.ow)}m${dist.nether !== null ? ` (${formatNumber(dist.nether)}m N)` : ''} · ${bearing.cardinal} ${bearing.yawStr}
                        </div>`
                     : `<div></div>`
                 }
@@ -1201,14 +1207,14 @@
     document.querySelectorAll('#bases-table thead th.th-sortable').forEach(th => {
       const isSorted = th.dataset.sort === state.sortBy;
       th.classList.toggle('is-sorted', isSorted);
-      const baseLabel = th.dataset.baseLabel || th.textContent.replace(/\s*[â†‘â†“]$/, '');
+      const baseLabel = th.dataset.baseLabel || th.textContent.replace(/\s*[↑↓]$/, '');
       th.dataset.baseLabel = baseLabel;
-      th.textContent = isSorted ? `${baseLabel} ${state.sortDir === 1 ? 'â†‘' : 'â†“'}` : baseLabel;
+      th.textContent = isSorted ? `${baseLabel} ${state.sortDir === 1 ? '↑' : '↓'}` : baseLabel;
     });
 
     if (filtered.length === 0) {
       if (state.bases.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="padding:56px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><strong style="color:var(--text-primary);">Database is empty â€” ready for manual base entries</strong><button type="button" class="btn-primary btn-sm" data-open-ingest>+ Add First Base</button></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="padding:56px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><strong style="color:var(--text-primary);">Database is empty — ready for manual base entries</strong><button type="button" class="btn-primary btn-sm" data-open-ingest>+ Add First Base</button></div></td></tr>`;
       } else {
         tbody.innerHTML = `<tr><td colspan="8" style="padding:48px 18px;text-align:center;color:var(--text-muted);"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><span>No matching bases found.</span><button type="button" class="btn-secondary btn-xs" data-reset-all-filters>Reset All Filters</button></div></td></tr>`;
       }
@@ -1243,7 +1249,7 @@
             </td>
 
             <td class="mono" style="color:var(--text-muted);" ${!state.tableColumns.plate ? 'hidden' : ''}>
-              ${escapeHtml(base.plate || 'â€”')}
+              ${escapeHtml(base.plate || '—')}
             </td>
 
             <td data-name-cell="${escapeHtml(base.id)}">
@@ -1258,7 +1264,7 @@
                   data-inline-rename="${escapeHtml(base.id)}"
                   aria-label="Rename ${escapeHtml(base.name)} inline"
                   title="Rename owner inline (F2)"
-                >âśŽ</button>
+                >✎</button>
                 ${base.dimension === 'the_end' ? `<span class="dim-pill">END</span>` : ''}
                 ${base.dimension === 'the_nether' ? `<span class="dim-pill">NETHER</span>` : ''}
                 ${routeIdx !== -1 ? `<span class="route-step-pill">#0${routeIdx + 1}</span>` : ''}
@@ -1286,14 +1292,14 @@
             <td class="num" ${!state.tableColumns.nether ? 'hidden' : ''}>
               ${
                 nc
-                  ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof XYZ (XĂ·8, 128, ZĂ·8)">${nc.x}, 128, ${nc.z}</span>`
-                  : `<span style="color:var(--text-muted);">â€”</span>`
+                  ? `<span class="coord-nether" data-copy="${escapeHtml(netherCopy)}" title="Click to copy Nether Roof XYZ (X÷8, 128, Z÷8)">${nc.x}, 128, ${nc.z}</span>`
+                  : `<span style="color:var(--text-muted);">—</span>`
               }
             </td>
 
             <td class="num" style="color:var(--text-secondary);" ${!state.tableColumns.vector ? 'hidden' : ''} title="${dist.nether !== null ? `Nether distance: ${formatNumber(dist.nether)}m` : 'The End'}">
               <span>${formatNumber(dist.ow)}m</span>
-              <span style="color:var(--text-muted);margin-left:4px;">Â· ${bearing.cardinal} ${bearing.yawStr}</span>
+              <span style="color:var(--text-muted);margin-left:4px;">· ${bearing.cardinal} ${bearing.yawStr}</span>
             </td>
 
             <td class="num">
@@ -1317,7 +1323,7 @@
                   class="btn-row-menu"
                   data-open-ctx="${escapeHtml(base.id)}"
                   aria-label="More actions"
-                >â‹Ż</button>
+                >⋯</button>
               </div>
             </td>
           </tr>
@@ -1410,7 +1416,7 @@
     ctx.lineTo(W, toScreenY(0));
     ctx.stroke();
 
-    // 4. Â±10,000 World Border
+    // 4. ±10,000 World Border
     const wbL = toScreenX(-10000);
     const wbR = toScreenX(10000);
     const wbT = toScreenY(-10000);
@@ -1558,7 +1564,7 @@
     const card = document.getElementById('map-selected-card');
     const base = state.bases.find(b => b.id === state.mapSelectedId) || state.bases[0];
     if (!base) {
-      card.innerHTML = `<div style="color:var(--text-muted);font-size:12px;">Database is empty â€” click <strong>+ Add Base</strong> to record a base.</div>`;
+      card.innerHTML = `<div style="color:var(--text-muted);font-size:12px;">Database is empty — click <strong>+ Add Base</strong> to record a base.</div>`;
     } else if (base) {
       const st = normalizeStatus(base.status);
       const stLabel = STATUS_LABELS[st] || 'Scouted';
@@ -1580,8 +1586,8 @@
 
         <div class="nether-callout mono" style="font-size:11.5px;">
           <div style="color:var(--text-primary);">OW: <span class="coord-xyz" data-copy="${base.x} ${base.y} ${base.z}">${base.x}, ${base.y}, ${base.z}</span></div>
-          ${nc ? `<div>Nether (Ă·8): <span class="coord-nether" data-copy="${nc.x} 128 ${nc.z}">${nc.x}, 128, ${nc.z}</span></div>` : `<div>Dimension: The End</div>`}
-          <div style="color:var(--text-secondary);margin-top:2px;">Î” ${formatNumber(dist.ow)}m Â· Yaw ${bearing.cardinal} ${bearing.yawStr}</div>
+          ${nc ? `<div>Nether (÷8): <span class="coord-nether" data-copy="${nc.x} 128 ${nc.z}">${nc.x}, 128, ${nc.z}</span></div>` : `<div>Dimension: The End</div>`}
+          <div style="color:var(--text-secondary);margin-top:2px;">Δ ${formatNumber(dist.ow)}m · Yaw ${bearing.cardinal} ${bearing.yawStr}</div>
         </div>
 
         <div style="display:flex;gap:6px;">
@@ -1610,9 +1616,9 @@
               <div class="route-leg-card">
                 <div class="route-leg-top">
                   <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text-primary);">
-                    #0${idx + 1} Â· ${escapeHtml(b.name)}
+                    #0${idx + 1} · ${escapeHtml(b.name)}
                   </span>
-                  <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">Ă—</button>
+                  <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">×</button>
                 </div>
                 <div class="route-leg-meta">
                   <span>End Gateway</span>
@@ -1630,12 +1636,12 @@
             <div class="route-leg-card">
               <div class="route-leg-top">
                 <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text-primary);">
-                  #0${idx + 1} Â· ${escapeHtml(b.name)}
+                  #0${idx + 1} · ${escapeHtml(b.name)}
                 </span>
-                <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">Ă—</button>
+                <button type="button" class="btn-icon-close" data-toggle-route="${escapeHtml(b.id)}" title="Remove stop">×</button>
               </div>
               <div class="route-leg-meta">
-                <span>Î” ${formatNumber(legN)}m N (${formatNumber(legOw)}m)</span>
+                <span>Δ ${formatNumber(legN)}m N (${formatNumber(legOw)}m)</span>
                 <span>${bearing.cardinal} ${bearing.yawStr}</span>
               </div>
             </div>
@@ -1679,10 +1685,10 @@
               <strong style="cursor:pointer;" data-open-dossier="${escapeHtml(base.id)}">${escapeHtml(base.name)}</strong>
             </div>
             <div style="display:flex;gap:4px;">
-              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:-1" ${idx === 0 ? 'disabled' : ''} title="Move Up">â†‘</button>
-              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:1" ${idx === stops.length - 1 ? 'disabled' : ''} title="Move Down">â†“</button>
+              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:-1" ${idx === 0 ? 'disabled' : ''} title="Move Up">↑</button>
+              <button type="button" class="btn-secondary btn-xs" data-route-move="${idx}:1" ${idx === stops.length - 1 ? 'disabled' : ''} title="Move Down">↓</button>
               <button type="button" class="btn-secondary btn-xs" data-copy-xaero="${escapeHtml(base.id)}">Xaero</button>
-              <button type="button" class="btn-secondary btn-xs" data-toggle-route="${escapeHtml(base.id)}" title="Remove stop">Ă—</button>
+              <button type="button" class="btn-secondary btn-xs" data-toggle-route="${escapeHtml(base.id)}" title="Remove stop">×</button>
             </div>
           </div>
           <div class="route-leg-meta">
@@ -1694,7 +1700,7 @@
             }
           </div>
           <div class="route-leg-meta" style="color:var(--text-muted);">
-            <span>${isEnd ? 'End Gateway (Stronghold Portal)' : `Leg Î”: ${formatNumber(legOw)}m OW (${formatNumber(legNether)}m N)`}</span>
+            <span>${isEnd ? 'End Gateway (Stronghold Portal)' : `Leg Δ: ${formatNumber(legOw)}m OW (${formatNumber(legNether)}m N)`}</span>
             <span>${isEnd ? 'Dimension: End' : `F3 Yaw: ${bearing.cardinal} ${bearing.yawStr}`}</span>
           </div>
         </div>
@@ -1812,8 +1818,8 @@
           .map(
             ({ base, wp }) => `
             <div class="xaero-manual-row">
-              <strong style="min-width:130px;">${escapeHtml(base.plate || '')} Â· ${escapeHtml(base.name)}</strong>
-              <span class="xaero-manual-string" title="${escapeHtml(wp.fileLine)}">XYZ: ${wp.x}, ${wp.y}, ${wp.z} Â· ${escapeHtml(wp.fileLine)}</span>
+              <strong style="min-width:130px;">${escapeHtml(base.plate || '')} · ${escapeHtml(base.name)}</strong>
+              <span class="xaero-manual-string" title="${escapeHtml(wp.fileLine)}">XYZ: ${wp.x}, ${wp.y}, ${wp.z} · ${escapeHtml(wp.fileLine)}</span>
               <div style="display:flex;gap:6px;flex-shrink:0;">
                 <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(wp.coordsText)}">Copy XYZ</button>
                 <button type="button" class="xaero-copy-btn" data-copy="${escapeHtml(wp.fileLine)}">Copy File Line</button>
@@ -1930,7 +1936,7 @@
     warnBox.hidden = false;
     const editSummary = document.getElementById('edit-dup-summary');
     if (editSummary) {
-      editSummary.textContent = `${matches.length} other base${matches.length > 1 ? 's' : ''} nearby â€” saving is still allowed`;
+      editSummary.textContent = `${matches.length} other base${matches.length > 1 ? 's' : ''} nearby — saving is still allowed`;
     }
     listEl.innerHTML = matches
       .map(m => {
@@ -1941,7 +1947,7 @@
           <div class="dup-match-card">
             <div class="dup-match-top">
               <div class="dup-match-owner">
-                <span class="mono" style="color:var(--text-muted);font-size:11px;">#${escapeHtml(m.base.plate || 'â€”')}</span>
+                <span class="mono" style="color:var(--text-muted);font-size:11px;">#${escapeHtml(m.base.plate || '—')}</span>
                 <span>${escapeHtml(m.base.name)}</span>
                 <span class="status-tag is-${st}" style="pointer-events:none;">
                   <span class="status-dot dot-${st}"></span><span>${stLabel}</span>
@@ -1950,8 +1956,8 @@
               <span class="dup-match-kind">${escapeHtml(m.label)}</span>
             </div>
             <div class="dup-match-coords">
-              <span>Existing Coords: <strong>${m.base.x}, ${m.base.y}, ${m.base.z}</strong>${nc ? ` Â· Nether (Ă·8): ${nc.x}, 128, ${nc.z}` : ''}</span>
-              ${m.dist2D !== null ? `<span>Î”XZ: <strong>${m.dist2D}m</strong> (${m.chunkDist} chunk${m.chunkDist === 1 ? '' : 's'})</span>` : ''}
+              <span>Existing Coords: <strong>${m.base.x}, ${m.base.y}, ${m.base.z}</strong>${nc ? ` · Nether (÷8): ${nc.x}, 128, ${nc.z}` : ''}</span>
+              ${m.dist2D !== null ? `<span>ΔXZ: <strong>${m.dist2D}m</strong> (${m.chunkDist} chunk${m.chunkDist === 1 ? '' : 's'})</span>` : ''}
             </div>
             <div class="dup-match-reason">${escapeHtml(m.reason)}</div>
           </div>
@@ -1972,7 +1978,7 @@
 
     document.getElementById('dossier-computed-strip').innerHTML = `
       <div>
-        <span class="popover-label" style="display:block;">NETHER ROOF (Ă·8)</span>
+        <span class="popover-label" style="display:block;">NETHER ROOF (÷8)</span>
         <strong style="color:var(--accent-nether);">${nc ? `${nc.x}, 128, ${nc.z}` : 'The End'}</strong>
       </div>
       <div>
@@ -1981,7 +1987,7 @@
       </div>
       <div>
         <span class="popover-label" style="display:block;">F3 HEADING YAW</span>
-        <strong>${bearing.cardinal} Â· ${bearing.yawStr}</strong>
+        <strong>${bearing.cardinal} · ${bearing.yawStr}</strong>
       </div>
     `;
     renderEditDuplicateWarning();
@@ -2075,10 +2081,10 @@
     const inRoute = state.routeIds.includes(base.id);
 
     menu.innerHTML = `
-      <div class="ctx-section-label">${escapeHtml(base.plate || '')} Â· ${escapeHtml(base.name)}</div>
+      <div class="ctx-section-label">${escapeHtml(base.plate || '')} · ${escapeHtml(base.name)}</div>
       <button type="button" class="ctx-item" data-ctx-action="dossier" data-id="${escapeHtml(base.id)}">
         <span>Edit Owner &amp; Coordinates</span>
-        <kbd class="kbd-token">â†µ</kbd>
+        <kbd class="kbd-token">↵</kbd>
       </button>
       <button type="button" class="ctx-item" data-ctx-action="copy-xyz" data-id="${escapeHtml(base.id)}">
         <span>Copy Overworld XYZ (${base.x}, ${base.y}, ${base.z})</span>
@@ -2097,13 +2103,13 @@
       ${
         nc
           ? `<button type="button" class="ctx-item" data-ctx-action="xaero-nether" data-id="${escapeHtml(base.id)}">
-               <span>Copy Local Nether Line (Ă·8)</span>
+               <span>Copy Local Nether Line (÷8)</span>
                <kbd class="kbd-token">N</kbd>
              </button>`
           : ''
       }
       <button type="button" class="ctx-item" data-ctx-action="open-seedmap" data-id="${escapeHtml(base.id)}">
-        <span>Open in Chunkbase Seed Map â†—</span>
+        <span>Open in Chunkbase Seed Map ↗</span>
       </button>
       <div class="ctx-divider"></div>
       <button type="button" class="ctx-item" data-ctx-action="toggle-route" data-id="${escapeHtml(base.id)}">
@@ -2160,7 +2166,7 @@
 
     if (type === 'status') {
       picker.innerHTML = `
-        <div class="ctx-section-label">Status â€” ${escapeHtml(base.name)}</div>
+        <div class="ctx-section-label">Status — ${escapeHtml(base.name)}</div>
         ${['priority', 'scouted', 'compromised', 'raided']
           .map(
             st => `
@@ -2169,7 +2175,7 @@
               <span class="status-dot dot-${st}"></span>
               <span>${STATUS_LABELS[st]}</span>
             </span>
-            ${normalizeStatus(base.status) === st ? '<span>âś“</span>' : ''}
+            ${normalizeStatus(base.status) === st ? '<span>✓</span>' : ''}
           </button>
         `
           )
@@ -2185,7 +2191,7 @@
   }
 
   // ============================================================================
-  // COMMAND PALETTE (Ctrl+K / âŚK)
+  // COMMAND PALETTE (Ctrl+K / ⌘K)
   // ============================================================================
 
   function buildCommandItems(query) {
@@ -2224,7 +2230,7 @@
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Copy All Active Nether Roof Portal Waypoint Lines (Ă·8)',
+        label: 'Copy All Active Nether Roof Portal Waypoint Lines (÷8)',
         sub: 'mw$default_1.txt',
         run: () => {
           const lines = state.bases
@@ -2244,7 +2250,7 @@
       {
         group: 'Route & Telemetry Actions',
         label: `Open SMP Seed Map in Chunkbase (${SMP_SEED})`,
-        sub: 'External Map â†—',
+        sub: 'External Map ↗',
         run: () => {
           window.open(getChunkbaseUrl(state.origin.x, state.origin.z, 'overworld'), '_blank', 'noopener');
         }
@@ -2257,13 +2263,13 @@
       },
       {
         group: 'Route & Telemetry Actions',
-        label: 'Toggle Global Coordinate Mode (Overworld â†” Nether Ă·8)',
-        sub: state.globalCoordMode === 'nether' ? 'Currently: Nether Ă·8' : 'Currently: Overworld',
+        label: 'Toggle Global Coordinate Mode (Overworld ↔ Nether ÷8)',
+        sub: state.globalCoordMode === 'nether' ? 'Currently: Nether ÷8' : 'Currently: Overworld',
         run: () => {
           state.globalCoordMode = state.globalCoordMode === 'nether' ? 'overworld' : 'nether';
           syncControlsFromState();
           renderAll();
-          showToast(`Display Mode â†’ ${state.globalCoordMode === 'nether' ? 'Nether Roof (Ă·8)' : 'Overworld'}`);
+          showToast(`Display Mode → ${state.globalCoordMode === 'nether' ? 'Nether Roof (÷8)' : 'Overworld'}`);
         }
       },
       {
@@ -2331,8 +2337,8 @@
       const nc = getNetherCoords(b);
       return {
         group: 'Cataloged Bases (Enter to Edit)',
-        label: `${b.plate || ''} Â· ${b.name}`,
-        sub: `OW: ${b.x}, ${b.y}, ${b.z}${nc ? ` Â· N: ${nc.x}, ${nc.z}` : ' Â· END'}`,
+        label: `${b.plate || ''} · ${b.name}`,
+        sub: `OW: ${b.x}, ${b.y}, ${b.z}${nc ? ` · N: ${nc.x}, ${nc.z}` : ' · END'}`,
         searchStr: `${b.plate} ${b.name} ${b.x} ${b.y} ${b.z}`.toLowerCase(),
         run: () => openDossier(b.id)
       };
@@ -2511,7 +2517,7 @@
           <div class="dup-match-card">
             <div class="dup-match-top">
               <div class="dup-match-owner">
-                <span class="mono" style="color:var(--text-muted);font-size:11px;">#${escapeHtml(m.base.plate || 'â€”')}</span>
+                <span class="mono" style="color:var(--text-muted);font-size:11px;">#${escapeHtml(m.base.plate || '—')}</span>
                 <span>Owner: <strong>${escapeHtml(m.base.name)}</strong></span>
                 <span class="status-tag is-${st}" style="pointer-events:none;">
                   <span class="status-dot dot-${st}"></span><span>${stLabel}</span>
@@ -2521,10 +2527,10 @@
               <span class="dup-match-kind">${escapeHtml(m.label)}</span>
             </div>
             <div class="dup-match-coords">
-              <span>Existing Coords: <strong>${m.base.x}, ${m.base.y}, ${m.base.z}</strong>${nc ? ` Â· Nether (Ă·8): <strong>${nc.x}, 128, ${nc.z}</strong>` : ''}</span>
+              <span>Existing Coords: <strong>${m.base.x}, ${m.base.y}, ${m.base.z}</strong>${nc ? ` · Nether (÷8): <strong>${nc.x}, 128, ${nc.z}</strong>` : ''}</span>
               ${
                 m.dist2D !== null
-                  ? `<span>Offset: <strong>${m.dist2D}m XZ</strong> (${m.chunkDist} chunk${m.chunkDist === 1 ? '' : 's'}) Â· Î”X ${m.dx}, Î”Y ${m.dy}, Î”Z ${m.dz}</span>`
+                  ? `<span>Offset: <strong>${m.dist2D}m XZ</strong> (${m.chunkDist} chunk${m.chunkDist === 1 ? '' : 's'}) · ΔX ${m.dx}, ΔY ${m.dy}, ΔZ ${m.dz}</span>`
                   : `<span>Same Owner Name</span>`
               }
             </div>
@@ -2558,9 +2564,9 @@
       const x = Number(xRaw);
       const z = Number(zRaw);
       if (xRaw !== '' && zRaw !== '' && !Number.isNaN(x) && !Number.isNaN(z)) {
-        el.textContent = `Nether Roof Portal (Ă·8): ${Math.floor(x / 8)}, 128, ${Math.floor(z / 8)}`;
+        el.textContent = `Nether Roof Portal (÷8): ${Math.floor(x / 8)}, 128, ${Math.floor(z / 8)}`;
       } else {
-        el.textContent = 'Nether Roof Portal (Ă·8): â€”';
+        el.textContent = 'Nether Roof Portal (÷8): —';
       }
     }
     renderIngestDuplicateWarning();
@@ -2796,7 +2802,7 @@
       };
       updateCalculatorFromOverworld();
       renderAll();
-      showToast(`Vector Origin â†’ ${state.origin.label}`);
+      showToast(`Vector Origin → ${state.origin.label}`);
     });
 
     // Status Filter Tabs
@@ -2842,7 +2848,7 @@
     });
     document.getElementById('btn-sort-dir').addEventListener('click', e => {
       state.sortDir *= -1;
-      e.currentTarget.textContent = state.sortDir === 1 ? 'â†‘ ASC' : 'â†“ DESC';
+      e.currentTarget.textContent = state.sortDir === 1 ? '↑ ASC' : '↓ DESC';
       renderAll();
     });
     document.getElementById('toggle-card-vectors').addEventListener('change', e => {
@@ -2969,7 +2975,7 @@
         const st = btn.dataset.bulkStatus;
         const ids = [...state.selectedIds];
         await bulkUpdateBases(ids, { status: st });
-        showToast(`Updated ${ids.length} bases â†’ ${STATUS_LABELS[st]}`);
+        showToast(`Updated ${ids.length} bases → ${STATUS_LABELS[st]}`);
       });
     });
     document.getElementById('btn-bulk-route').addEventListener('click', () => {
@@ -3315,7 +3321,7 @@
         return;
       }
 
-      // Inline Rename Trigger Button (âśŽ in Table View)
+      // Inline Rename Trigger Button (✎ in Table View)
       const inlineRenameBtn = e.target.closest('[data-inline-rename]');
       if (inlineRenameBtn) {
         e.stopPropagation();
@@ -3325,7 +3331,7 @@
         return;
       }
 
-      // Open Context Menu via â‹Ż button (or close if already open on this button)
+      // Open Context Menu via ⋯ button (or close if already open on this button)
       const ctxBtn = e.target.closest('[data-open-ctx]');
       if (ctxBtn) {
         e.stopPropagation();
@@ -3345,7 +3351,7 @@
             const curr = normalizeStatus(base.status);
             const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(curr) + 1) % STATUS_CYCLE.length];
             await updateBase(id, { status: next });
-            showToast(`${base.name} â†’ ${STATUS_LABELS[next]}`);
+            showToast(`${base.name} → ${STATUS_LABELS[next]}`);
           }
         } else {
           openInlinePicker('status', id, statusBtn);
@@ -3360,7 +3366,7 @@
         const st = ctxStatus.dataset.ctxStatus;
         closeContextMenus();
         const updated = await updateBase(id, { status: st });
-        if (updated) showToast(`${updated.name} â†’ ${STATUS_LABELS[st]}`);
+        if (updated) showToast(`${updated.name} → ${STATUS_LABELS[st]}`);
         return;
       }
 
@@ -3422,7 +3428,7 @@
         return;
       }
 
-      // Route Reorder (â†‘ / â†“)
+      // Route Reorder (↑ / ↓)
       const routeMoveBtn = e.target.closest('[data-route-move]');
       if (routeMoveBtn) {
         const [idxStr, dirStr] = routeMoveBtn.dataset.routeMove.split(':');
@@ -3458,7 +3464,7 @@
       const copyEl = e.target.closest('[data-copy]');
       if (copyEl && copyEl.dataset.copy) {
         e.stopPropagation();
-        await copyText(copyEl.dataset.copy, `Copied ${copyEl.dataset.copy}`, copyEl, 'âś“ Copied');
+        await copyText(copyEl.dataset.copy, `Copied ${copyEl.dataset.copy}`, copyEl, '✓ Copied');
         return;
       }
 
@@ -3469,7 +3475,7 @@
         const base = state.bases.find(b => b.id === xaeroBtn.dataset.copyXaero);
         if (!base) return;
         const wp = buildXaeroWaypointData(base, { indexPrefix: base.plate });
-        await copyText(wp.fileLine, `Copied local Xaero line for ${base.name}`, xaeroBtn, 'âś“ Copied');
+        await copyText(wp.fileLine, `Copied local Xaero line for ${base.name}`, xaeroBtn, '✓ Copied');
         return;
       }
 
@@ -3512,7 +3518,7 @@
         const wx = Math.round(state.radar.centerX + (mx - rect.width / 2) / pxPerBlock);
         const wz = Math.round(state.radar.centerZ + (my - rect.height / 2) / pxPerBlock);
         document.getElementById('radar-cursor-readout').textContent =
-          `X: ${wx}, Z: ${wz} Â· Nether: ${Math.floor(wx / 8)}, ${Math.floor(wz / 8)}`;
+          `X: ${wx}, Z: ${wz} · Nether: ${Math.floor(wx / 8)}, ${Math.floor(wz / 8)}`;
 
         let hit = null;
         for (const b of getFilteredBases()) {
@@ -3721,7 +3727,7 @@
       void warnBox.offsetWidth; // restart highlight animation
       warnBox.classList.add('is-attention');
       warnBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      showToast("Potential duplicate â€” compare below, or click 'Save Anyway as Separate Base'");
+      showToast("Potential duplicate — compare below, or click 'Save Anyway as Separate Base'");
     };
 
     let ingestSaving = false;
@@ -3741,7 +3747,7 @@
       try {
         const created = await createBase({ ...readIngestPayload(), confirmDuplicate: matches.length > 0 });
         if (created?.duplicateWarning) {
-          // Server knows about a base the client didn't have yet â€” refresh and re-show
+          // Server knows about a base the client didn't have yet — refresh and re-show
           await fetchBases();
           flagDuplicateAttention();
           return;
@@ -3773,7 +3779,7 @@
         const updated = await updateBase(id, patch);
         if (updated) {
           closeIngestModal();
-          showToast(`Updated ${updated.name} â†’ ${patch.x}, ${patch.y}, ${patch.z}`);
+          showToast(`Updated ${updated.name} → ${patch.x}, ${patch.y}, ${patch.z}`);
         }
         return;
       }
