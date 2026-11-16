@@ -215,9 +215,22 @@
       .trim();
   }
 
-  function getChunkbaseUrl(x, z, dimension = 'overworld') {
+  function getChunkbaseUrl(x, z, dimension = 'overworld', { pin = true } = {}) {
     const dimParam = dimension === 'the_end' ? 'end' : dimension === 'the_nether' ? 'nether' : 'overworld';
-    return `https://www.chunkbase.com/apps/seed-map#seed=${SMP_SEED}&platform=java_1_21&dimension=${dimParam}&x=${Math.round(x || 0)}&z=${Math.round(z || 0)}&zoom=0.5`;
+    const cx = Math.round(Number(x) || 0);
+    const cz = Math.round(Number(z) || 0);
+    // Chunkbase reads view state from the URL hash: x/z centre the map, pinX/pinZ drop a
+    // marker, and selectedPoi=pin opens the marker popover (coords + biome).
+    const params = [
+      `seed=${SMP_SEED}`,
+      'platform=java_1_21',
+      `dimension=${dimParam}`,
+      `x=${cx}`,
+      `z=${cz}`,
+      'zoom=0.5'
+    ];
+    if (pin) params.push(`pinX=${cx}`, `pinZ=${cz}`, 'selectedPoi=pin');
+    return `https://www.chunkbase.com/apps/seed-map#${params.join('&')}`;
   }
 
   function buildXaeroWaypointData(base, options = {}) {
@@ -2252,7 +2265,7 @@
         label: `Open SMP Seed Map in Chunkbase (${SMP_SEED})`,
         sub: 'External Map ↗',
         run: () => {
-          window.open(getChunkbaseUrl(state.origin.x, state.origin.z, 'overworld'), '_blank', 'noopener');
+          window.open(getChunkbaseUrl(state.origin.x, state.origin.z, 'overworld', { pin: false }), '_blank', 'noopener');
         }
       },
       {
